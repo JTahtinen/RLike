@@ -1,0 +1,1 @@
+cl /Zi /EHsc /std:c++latest src\*.cpp /Iinclude/ /IC:/Work/jadel/export/include/ /IC:\Stuff\SDL2-2.0.8\include\ C:/Work/jadel/export/lib/*.lib C:\Stuff\SDL2-2.0.8\lib\x64\*.lib lib/*.lib /Foobj/ /Febin\rlike.exe
