@@ -148,8 +148,6 @@ struct Game
     jadel::Surface poisonSprite;
     jadel::Surface hpackSprite;
     jadel::Surface portalSprite;
-
-
     jadel::Surface workingBuffer;
     
 };

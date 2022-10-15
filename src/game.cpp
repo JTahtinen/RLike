@@ -314,7 +314,7 @@ bool move(int x, int y, Actor* actor)
         nextTile.y < 0 || nextTile.y >= currentGame->currentWorld->height) return false;
     if (!currentGame->currentWorld->sectors[nextTile.x + nextTile.y * currentGame->currentWorld->width].tile->barrier)
     {
-        actor->transit.inTransit = true;
+        //actor->transit.inTransit = true;
         
         Sector* currentSector = getSectorFromPos(entity->pos.x, entity->pos.y);
         Sector* nextSector = getSectorFromPos(entity->pos.x + x, entity->pos.y + y);
@@ -356,7 +356,7 @@ void attack(Actor* attacker, Actor* target)
 
 bool tryToMove(int x, int y, Actor* actor)
 {
-    if (actor->transit.inTransit) return false;
+    //if (actor->transit.inTransit) return false;
     iPoint entityPos = actor->gameObject.entity.pos;
     Sector* nextSector = getSectorFromPos(entityPos.x + x, entityPos.y + y);
     if (!nextSector) return false;
@@ -901,6 +901,7 @@ void updateSubstateGame()
             
         }
     }
+    /*
     for (int i = 0; i < currentGame->currentWorld->numActors; ++i)
     {
         Actor* actor = currentGame->currentWorld->actors[i];
@@ -914,7 +915,7 @@ void updateSubstateGame()
             }
             currentGame->updateGame = true;
         }
-    }
+        }*/
 
 }
 
@@ -924,7 +925,7 @@ void updateGame()
     {
         exit(0);
     }
-
+    static iPoint prevCamPos = {currentGame->screenPos.x, currentGame->screenPos.y};
     switch (currentGame->currentState)
     {
         case SUBSTATE_GAME:
@@ -952,12 +953,15 @@ void updateGame()
             && currentGame->screenPos.x < currentGame->currentWorld->width
             && currentGame->screenPos.y < currentGame->currentWorld->height)
         {
+            
             int xStart = currentGame->screenPos.x < 0 ? 0 : currentGame->screenPos.x;
             int yStart = currentGame->screenPos.y < 0 ? 0 : currentGame->screenPos.y;
             int xEnd = currentGame->screenPos.x + screenTilemapW <= currentGame->currentWorld->width
                 ? (currentGame->screenPos.x + screenTilemapW) : currentGame->currentWorld->width;
             int yEnd = currentGame->screenPos.y + screenTilemapH <= currentGame->currentWorld->height
                 ? (currentGame->screenPos.y + screenTilemapH) : currentGame->currentWorld->height;
+
+            
 
             iRect worldScreenEndDim = getSectorScreenPos(currentGame->currentWorld->width,
                                                          currentGame->currentWorld->height);
@@ -982,28 +986,31 @@ void updateGame()
 
 
                
-            jadel::blitSurface(&currentGame->currentWorld->worldSurface, worldStartPos, worldScreenDim);
-                
+//            jadel::blitSurface(&currentGame->currentWorld->worldSurface, worldStartPos, worldScreenDim);
+
             
+            Actor* player = &currentGame->player;
+                        
             for (int y = yStart; y < yEnd; ++y)
             {
                 for (int x = xStart; x < xEnd; ++x)
                 {
+
                     iRect sectorPos = getSectorScreenPos(x, y);
+                    
                     Sector currentSector = currentGame->currentWorld->sectors[x + y * currentGame->currentWorld->width];
                     
                     const jadel::Surface* sectorSprite = NULL;
                     if (currentSector.portal)
                     {
                         sectorSprite = &currentGame->portalSprite;
-                    }
-                    /*
+                    }                    
                     else
                     {
                         sectorSprite = currentSector.tile->surface;
                     }
                     jadel::blitSurface(sectorSprite, sectorPos);
-                    */
+                    
                     iRect entityDim
                             = {.x = sectorPos.x,
                                .y = sectorPos.y,
@@ -1018,7 +1025,7 @@ void updateGame()
                     
                     const jadel::Surface* spriteToDraw = NULL;
 
-                    if (currentSector.occupant && !currentSector.occupant->transit.inTransit)
+                    if (currentSector.occupant)// && !currentSector.occupant->transit.inTransit)
                     {
                         AnimFrames* frames
                             = &currentSector.occupant->gameObject.frames;
@@ -1046,7 +1053,7 @@ void updateGame()
                         jadel::blitSurface(spriteToDraw, entityDim);
 
                     }
-                    for (int i = 0; i < currentGame->currentWorld->numActors; ++i)
+/*                    for (int i = 0; i < currentGame->currentWorld->numActors; ++i)
                     {
                         Actor* actor = currentGame->currentWorld->actors[i];
                         if (actor->transit.inTransit)
@@ -1062,9 +1069,9 @@ void updateGame()
                                 currentGame->tileScreenH
                             };
                             jadel::blitSurface(
-                                actor->gameObject.frames.sprites[actor->gameObject.frames.currentFrameIndex], currentPoint); 
+                            actor->gameObject.frames.sprites[actor->gameObject.frames.currentFrameIndex], currentPoint); 
                         }
-                    }
+                    }*/
                 }
             }
         }
