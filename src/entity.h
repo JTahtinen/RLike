@@ -1,9 +1,9 @@
 #pragma once
-#include <jadel/jadel.h>
+#include <jadel.h>
 
 struct Entity
 {
     uint32 GUID;
     char name[20];
-    iPoint pos;    
+    jadel::Point2i pos;    
 };

@@ -1,9 +1,9 @@
 #include "game.h"
-#include <jadel/jadel.h>
+#include <jadel.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "file.h"
+//#include "file.h"
 #include "inventory.h"
 
 Game* currentGame;
@@ -160,25 +160,25 @@ void pushActor(int x, int y, AnimFrames frames, const char* name, World* world)
 }
 
 
-iRect getSectorScreenPos(int x, int y)
+jadel::Recti getSectorScreenPos(int x, int y)
 {
-    iRect result = {.x = (x - currentGame->screenPos.x) * currentGame->tileScreenW,
+    jadel::Recti result = {.x = (x - currentGame->screenPos.x) * currentGame->tileScreenW,
                  .y = (y - currentGame->screenPos.y) * currentGame->tileScreenH,
                  .w = currentGame->tileScreenW,
                  .h = currentGame->tileScreenH};
     return result;
 }
 
-iRect getSectorScreenPos(iPoint pos)
+jadel::Recti getSectorScreenPos(jadel::Point2i pos)
 {
-    iRect result = getSectorScreenPos(pos.x, pos.y);
+    jadel::Recti result = getSectorScreenPos(pos.x, pos.y);
     return result;
 }
 
-iRect getSectorScreenPos(const Sector* sector)
+jadel::Recti getSectorScreenPos(const Sector* sector)
 {
-    iPoint pos = sector->pos;
-    iRect result = getSectorScreenPos(pos.x, pos.y);
+    jadel::Point2i pos = sector->pos;
+    jadel::Recti result = getSectorScreenPos(pos.x, pos.y);
     return result;
 }
 
@@ -198,13 +198,13 @@ Sector* getSectorFromPos(int x, int y)
     return result;
 }
 
-Sector* getSectorFromPos(iPoint pos, World* world)
+Sector* getSectorFromPos(jadel::Point2i pos, World* world)
 {
     Sector* result = getSectorFromPos(pos.x, pos.y, world);
     return result;
 }
 
-Sector* getSectorFromPos(iPoint pos)
+Sector* getSectorFromPos(jadel::Point2i pos)
 {
     Sector* result = getSectorFromPos(pos, currentGame->currentWorld);
     return result;
@@ -267,7 +267,7 @@ void setSectorOccupant(int x, int y, Actor* occupant)
     }
 }
 
-void setSectorOccupant(iPoint coords, Actor* occupant)
+void setSectorOccupant(jadel::Point2i coords, Actor* occupant)
 {
     setSectorOccupant(coords.x, coords.y, occupant);
 }
@@ -289,7 +289,7 @@ void addSectorItem(int x, int y, Item* item)
 bool moveTo(Sector* sector, Actor* actor)
 {
     Entity* entity = &actor->gameObject.entity;
-    iPoint nextTile = sector->pos;
+    jadel::Point2i nextTile = sector->pos;
     if (nextTile.x < 0 || nextTile.x >= currentGame->currentWorld->width ||
         nextTile.y < 0 || nextTile.y >= currentGame->currentWorld->height) return false;
     if (!currentGame->currentWorld->sectors[nextTile.x + nextTile.y * currentGame->currentWorld->width].tile->barrier)
@@ -309,7 +309,7 @@ bool moveTo(Sector* sector, Actor* actor)
 bool move(int x, int y, Actor* actor)
 {
     Entity* entity = &actor->gameObject.entity;
-    iPoint nextTile = {.x = x + entity->pos.x, .y = y + entity->pos.y};
+    jadel::Point2i nextTile = {.x = x + entity->pos.x, .y = y + entity->pos.y};
     if (nextTile.x < 0 || nextTile.x >= currentGame->currentWorld->width ||
         nextTile.y < 0 || nextTile.y >= currentGame->currentWorld->height) return false;
     if (!currentGame->currentWorld->sectors[nextTile.x + nextTile.y * currentGame->currentWorld->width].tile->barrier)
@@ -357,7 +357,7 @@ void attack(Actor* attacker, Actor* target)
 bool tryToMove(int x, int y, Actor* actor)
 {
     if (actor->transit.inTransit) return false;
-    iPoint entityPos = actor->gameObject.entity.pos;
+    jadel::Point2i entityPos = actor->gameObject.entity.pos;
     Sector* nextSector = getSectorFromPos(entityPos.x + x, entityPos.y + y);
     if (!nextSector) return false;
     if (!nextSector->occupant)
@@ -390,13 +390,13 @@ void initSector(int x, int y, const Tile* tile, Sector* target)
 
 int distanceBetweenSectors(const Sector* a, const Sector* b)
 {
-    iPoint posA = a->pos;
-    iPoint posB = b->pos;
+    jadel::Point2i posA = a->pos;
+    jadel::Point2i posB = b->pos;
 
     if (posA.x == posB.x && posA.y == posB.y) return 0;
 
-    int xDiff = absINT(posB.x - posA.x);
-    int yDiff = absINT(posB.y - posA.y);
+    int xDiff = jadel::absInt(posB.x - posA.x);
+    int yDiff = jadel::absInt(posB.y - posA.y);
 
     int higherDiff = xDiff > yDiff ? xDiff : yDiff;
     int lowerDiff = xDiff > yDiff ? yDiff : xDiff;
@@ -439,7 +439,7 @@ AStarNode* calculatePathNodesFor(const Sector* sector, const Sector* start, cons
         currentNode->hCost = distanceBetweenSectors(start, destination);
         currentNode->isCalculated = true;
     }
-    iPoint secPos = sector->pos;
+    jadel::Point2i secPos = sector->pos;
     
     currentNode->isClosed = true;
     currentGame->currentWorld->calculatedPathNodes[currentGame->currentWorld->numCalculatedPathNodes++] = currentNode;
@@ -556,15 +556,15 @@ void moveToSector(int x, int y, Actor* actor)
     getSectorFromPos(x, y)->occupant = actor;
 }
 
-iPoint getCameraLeft(iPoint camera)
+jadel::Point2i getCameraLeft(jadel::Point2i camera)
 {
-    iPoint result = camera;
+    jadel::Point2i result = camera;
     return result;
 }
 
-iPoint getCameraRight(iPoint camera)
+jadel::Point2i getCameraRight(jadel::Point2i camera)
 {
-    iPoint result =
+    jadel::Point2i result =
     {
         .x = camera.x + screenTilemapW,
         .y = camera.y + screenTilemapH
@@ -588,8 +588,8 @@ bool initWorld(int width, int height, World* world)
     world->numCalculatedPathNodes = 0;
     world->calculatedPathNodes = (AStarNode**)malloc(width * height * sizeof(AStarNode*));
     currentGame->currentWorld = world;
-    jadel::createSurface(width * currentGame->tileScreenW, height * currentGame->tileScreenH, &world->worldSurface, "WorldSurface");
-    jadel::pushTargetSurface(&world->worldSurface);
+    jadel::graphicsCreateSurface(width * currentGame->tileScreenW, height * currentGame->tileScreenH, &world->worldSurface);
+    jadel::graphicsPushTargetSurface(&world->worldSurface);
     for (int y = 0; y < height; ++y)
     {
         for (int x = 0; x < width; ++x)
@@ -603,14 +603,14 @@ bool initWorld(int width, int height, World* world)
             node->pos = {x, y};
             node->sector = getSectorFromPos(x, y);
             const jadel::Surface* sectorSprite = currentSector->tile->surface;
-            iRect sectorPos = getSectorScreenPos(x, y);
+            jadel::Recti sectorPos = getSectorScreenPos(x, y);
           
-            jadel::blitSurface(sectorSprite, sectorPos);
+            jadel::graphicsBlit(sectorSprite, sectorPos);
             
         }
     }
 
-    jadel::popTargetSurface();
+    jadel::graphicsPopTargetSurface();
 
     
     return true;
@@ -629,8 +629,8 @@ bool initGame(jadel::Window* window)
         return false;
     }
     
-    currentGame->tileScreenW = window->surface.width / screenTilemapW;
-    currentGame->tileScreenH = window->surface.height / screenTilemapH;
+    currentGame->tileScreenW = window->width / screenTilemapW;
+    currentGame->tileScreenH = window->height / screenTilemapH;
 
 
     gameCommands.numCommands = 7;
@@ -684,7 +684,7 @@ bool initGame(jadel::Window* window)
 
         
     
-    jadel::createSurface(window->surface.width, window->surface.height, &currentGame->workingBuffer, "WorkingBuffer");
+    jadel::graphicsCreateSurface(window->width, window->height, &currentGame->workingBuffer);
     
     
     currentGame->walkTile = {.surface = &currentGame->walkSurface, .barrier = false};
@@ -694,9 +694,9 @@ bool initGame(jadel::Window* window)
     initWorld(20, 10, &currentGame->worlds[0]);
     initWorld(8, 7, &currentGame->worlds[1]);
 
-    jadel::pushTargetSurface(&currentGame->workingBuffer);
-    jadel::setClearColor(0);
-    jadel::clearTargetSurface();
+    jadel::graphicsPushTargetSurface(&currentGame->workingBuffer);
+    jadel::graphicsSetClearColor(0);
+    jadel::graphicsClearTargetSurface();
     
     currentGame->player = createActor(2, 3, playerFrames, "Player");
 
@@ -728,13 +728,13 @@ bool initGame(jadel::Window* window)
             
         for (int a = 0; a < curWorld->numActors; ++a)
         {
-            iPoint actorPos = curWorld->actors[a]->gameObject.entity.pos;
+            jadel::Point2i actorPos = curWorld->actors[a]->gameObject.entity.pos;
             setSectorOccupant(actorPos.x, actorPos.y, curWorld->actors[a]);
         }
         
         for (int j = 0; j < curWorld->numItems; ++j)
         {
-            iPoint itemPos = curWorld->items[j]->gameObject.entity.pos;
+            jadel::Point2i itemPos = curWorld->items[j]->gameObject.entity.pos;
             addSectorItem(itemPos.x, itemPos.y, curWorld->items[j]);
         }
     }
@@ -762,7 +762,7 @@ void updateSubstateGame()
     currentGame->numCommands = 0;
     for (int i = 0; i < gameCommands.numCommands; ++i)
     {
-        if (jadel::isKeyTyped(gameCommands.keys[i]))
+        if (jadel::inputIsKeyTyped(gameCommands.keys[i]))
         {
             currentGame->commandQueue[currentGame->numCommands++] = gameCommands.commands[i];
         }
@@ -805,7 +805,7 @@ void updateSubstateGame()
                 currentGame->currentState = SUBSTATE_INVENTORY;
                 break;
             }
-            if (jadel::isKeyTyped(jadel::KEY_K))
+            if (jadel::inputIsKeyTyped(jadel::KEY_K))
             {
                 if (currentGame->pSteps < currentGame->pathLength)
                 {
@@ -871,14 +871,14 @@ void updateSubstateGame()
         }
 
     }
-    if (jadel::isKeyTyped(jadel::KEY_C))
+    if (jadel::inputIsKeyTyped(jadel::KEY_C))
     {
         currentGame->pSteps = 0;
         calculatePath(getSectorOfActor(&currentGame->player),
                       getSectorOfGameObject(&currentGame->currentWorld->items[1]->gameObject));
         currentGame->updateGame = true;
     }
-    if (jadel::isKeyTyped(jadel::KEY_M))
+    if (jadel::inputIsKeyTyped(jadel::KEY_M))
     {
         Portal* portal = getSectorOfActor(&currentGame->player)->portal;
         if (portal)
@@ -920,7 +920,7 @@ void updateSubstateGame()
 
 void updateGame()
 {
-    if (jadel::isKeyPressed(jadel::KEY_ESCAPE))
+    if (jadel::inputIsKeyPressed(jadel::KEY_ESCAPE))
     {
         exit(0);
     }
@@ -946,7 +946,7 @@ void updateGame()
              .y = currentGame->player.gameObject.entity.pos.y - screenTilemapH / 2};
         currentGame->updateGame = false;
            
-        jadel::clearTargetSurface();
+        jadel::graphicsClearTargetSurface();
         if (currentGame->screenPos.x > -screenTilemapW
             && currentGame->screenPos.y > -screenTilemapH
             && currentGame->screenPos.x < currentGame->currentWorld->width
@@ -959,14 +959,14 @@ void updateGame()
             int yEnd = currentGame->screenPos.y + screenTilemapH <= currentGame->currentWorld->height
                 ? (currentGame->screenPos.y + screenTilemapH) : currentGame->currentWorld->height;
 
-            iRect worldScreenEndDim = getSectorScreenPos(currentGame->currentWorld->width,
+            jadel::Recti worldScreenEndDim = getSectorScreenPos(currentGame->currentWorld->width,
                                                          currentGame->currentWorld->height);
-            if (worldScreenEndDim.x > currentGame->window->surface.width) worldScreenEndDim.x = currentGame->window->surface.width;
-            if (worldScreenEndDim.y > currentGame->window->surface.height) worldScreenEndDim.y = currentGame->window->surface.height;
+            if (worldScreenEndDim.x > currentGame->window->width) worldScreenEndDim.x = currentGame->window->width;
+            if (worldScreenEndDim.y > currentGame->window->height) worldScreenEndDim.y = currentGame->window->height;
 
-            //iRect worldScreenEndDim = getSectorScreenPos(getCameraRight(currentGame->screenPos));            
+            //Recti worldScreenEndDim = getSectorScreenPos(getCameraRight(currentGame->screenPos));            
             
-            iRect worldScreenDim = getSectorScreenPos(0, 0);
+            jadel::Recti worldScreenDim = getSectorScreenPos(0, 0);
             if (worldScreenDim.x < 0) worldScreenDim.x = 0;
             if (worldScreenDim.y < 0) worldScreenDim.y = 0;
 
@@ -974,7 +974,7 @@ void updateGame()
             worldScreenDim.w = worldScreenEndDim.x - worldScreenDim.x;
             worldScreenDim.h = worldScreenEndDim.y - worldScreenDim.y;
             
-            iRect worldStartPos =
+            jadel::Recti worldStartPos =
                 {.x = currentGame->screenPos.x * currentGame->tileScreenW,
                  .y = currentGame->screenPos.y * currentGame->tileScreenH,
                  .w = worldScreenEndDim.x, //screenTilemapW * currentGame->tileScreenW,
@@ -982,20 +982,24 @@ void updateGame()
 
 
                
-            jadel::blitSurface(&currentGame->currentWorld->worldSurface, worldStartPos, worldScreenDim);
+            //jadel::graphicsBlit(&currentGame->currentWorld->worldSurface, worldStartPos, worldScreenDim);
                 
             
             for (int y = yStart; y < yEnd; ++y)
             {
                 for (int x = xStart; x < xEnd; ++x)
                 {
-                    iRect sectorPos = getSectorScreenPos(x, y);
+                    jadel::Recti sectorPos = getSectorScreenPos(x, y);
                     Sector currentSector = currentGame->currentWorld->sectors[x + y * currentGame->currentWorld->width];
                     
                     const jadel::Surface* sectorSprite = NULL;
                     if (currentSector.portal)
                     {
                         sectorSprite = &currentGame->portalSprite;
+                    }
+                    else
+                    {
+                        sectorSprite = currentSector.tile->surface;
                     }
                     /*
                     else
@@ -1004,7 +1008,7 @@ void updateGame()
                     }
                     jadel::blitSurface(sectorSprite, sectorPos);
                     */
-                    iRect entityDim
+                    jadel::Recti entityDim
                             = {.x = sectorPos.x,
                                .y = sectorPos.y,
                                .w = currentGame->tileScreenW,
@@ -1013,7 +1017,7 @@ void updateGame()
                         
                     if (sectorSprite)
                     {
-                        jadel::blitSurface(sectorSprite, entityDim);
+                        jadel::graphicsBlit(sectorSprite, entityDim);
                     }
                     
                     const jadel::Surface* spriteToDraw = NULL;
@@ -1036,14 +1040,14 @@ void updateGame()
                     }
                     if (spriteToDraw)
                     {
-                        /*iRect sourceDim
+                        /*Recti sourceDim
                             ={.x = 122,
                                .y = 0,
                                .w = 122,
                                .h = 255};
                         */
                         
-                        jadel::blitSurface(spriteToDraw, entityDim);
+                        jadel::graphicsBlit(spriteToDraw, entityDim);
 
                     }
                     for (int i = 0; i < currentGame->currentWorld->numActors; ++i)
@@ -1051,17 +1055,17 @@ void updateGame()
                         Actor* actor = currentGame->currentWorld->actors[i];
                         if (actor->transit.inTransit)
                         {
-                            iRect startPos = getSectorScreenPos(actor->transit.startSector);
-                            iRect endPos = getSectorScreenPos(actor->transit.endSector);
-                            iPoint posDiff = {endPos.x - startPos.x, endPos.y - startPos.y};
-                            iRect currentPoint =
+                            jadel::Recti startPos = getSectorScreenPos(actor->transit.startSector);
+                            jadel::Recti endPos = getSectorScreenPos(actor->transit.endSector);
+                            jadel::Point2i posDiff = {endPos.x - startPos.x, endPos.y - startPos.y};
+                            jadel::Recti currentPoint =
                             {
-                                roundToInt((float)startPos.x + (float)posDiff.x * actor->transit.progress),
-                                roundToInt((float)startPos.y + (float)posDiff.y * actor->transit.progress),
+                                jadel::roundToInt((float)startPos.x + (float)posDiff.x * actor->transit.progress),
+                                jadel::roundToInt((float)startPos.y + (float)posDiff.y * actor->transit.progress),
                                 currentGame->tileScreenW,
                                 currentGame->tileScreenH
                             };
-                            jadel::blitSurface(
+                            jadel::graphicsBlit(
                                 actor->gameObject.frames.sprites[actor->gameObject.frames.currentFrameIndex], currentPoint); 
                         }
                     }
@@ -1072,17 +1076,17 @@ void updateGame()
             
         for (int i = 0; i < currentGame->pathLength; ++i)
         {            
-            iRect sectorPos = getSectorScreenPos(currentGame->path[i]);
+            jadel::Recti sectorPos = getSectorScreenPos(currentGame->path[i]);
             for (int py = sectorPos.y; py < sectorPos.y + sectorPos.h; ++py)
             {
                 for (int px = sectorPos.x; px < sectorPos.x + sectorPos.w; ++px)
                 {
-                    jadel::drawPixel(px, py, 0xff550000);
+                    jadel::graphicsDrawPixelFast(px, py, 0xff550000);
                 }
             }
         }
             
-        jadel::flipVertically(&currentGame->workingBuffer);
-        jadel::applySurface(&currentGame->workingBuffer, true, currentGame->window);
+        //jadel::flipVertically(&currentGame->workingBuffer);
+        //jadel::applySurface(&currentGame->workingBuffer, true, currentGame->window);
     }
 }

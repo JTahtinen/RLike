@@ -1,9 +1,9 @@
-#include <jadel/jadel.h>
+#include <jadel.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "game.h"
-#include "file.h"
+//#include "file.h"
 #include <thread>
 #include "timer.h"
 
@@ -13,16 +13,19 @@ static int windowHeight = 600;
 
 Game game;
 
-int main(int argc, char** argv)
+//int main(int argc, char** argv)
+int JadelMain()
 {
-    if (!jadel::initJadel())
+    if (!JadelInit())
     {
         printf("Jadel init failed!\n");
     }
 
-    jadel::Window window;       
-    createWindow("RLike", windowWidth, windowHeight, &window);
-    uint32* winPixels = getPixels(&window);
+    jadel::Window window;
+    jadel::windowCreate(&window, "Rlike", windowWidth, windowHeight);     
+    jadel::Surface winSurface;
+    jadel::graphicsCreateSurface(windowWidth, windowHeight, &winSurface);
+    uint32* winPixels = (uint32*)winSurface.pixels;
     setGame(&game);
     if (!initGame(&window))
     {
@@ -37,9 +40,9 @@ int main(int argc, char** argv)
     {
         
         
-        jadel::updateJadel();
+        JadelUpdate();
         updateGame();
-        jadel::updateWindow(&window);
+        jadel::windowUpdate(&window, &game.workingBuffer);
         
         elapsedInMillis = frameTimer.getMillisSinceLastUpdate();
         if (elapsedInMillis < minFrameTime)

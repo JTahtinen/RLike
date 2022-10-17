@@ -34,7 +34,7 @@ ItemSlot* askInventorySlot(Inventory* inventory)
     for (int i = 1; i < 10; ++i)
     {
         int j = 0;
-        if (jadel::isKeyTyped(jadel::KEY_0 + i))
+        if (jadel::inputIsKeyTyped(jadel::KEY_0 + i))
         {               
             for (int itemIndex = 0; itemIndex < 10; ++itemIndex)
             {
@@ -56,12 +56,12 @@ ItemSlot* askInventorySlot(Inventory* inventory)
 
 void updateSubstateInventory()
 {
-    if (jadel::isKeyTyped(jadel::KEY_I))
+    if (jadel::inputIsKeyTyped(jadel::KEY_I))
     {
         closeInventory(&currentGame->player.inventory);
         return;
     }
-    if (jadel::isKeyTyped(jadel::KEY_U))
+    if (jadel::inputIsKeyTyped(jadel::KEY_U))
     {
         currentGame->player.inventory.useMode = !currentGame->player.inventory.useMode;
         if (currentGame->player.inventory.useMode)
@@ -69,7 +69,7 @@ void updateSubstateInventory()
             printf("Use item (1-9)\n");
         }
     }
-    if (jadel::isKeyTyped(jadel::KEY_D))
+    if (jadel::inputIsKeyTyped(jadel::KEY_D))
     {
         currentGame->player.inventory.dropMode = !currentGame->player.inventory.dropMode;
         if (currentGame->player.inventory.dropMode)

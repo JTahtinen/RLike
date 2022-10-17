@@ -1,6 +1,6 @@
 #pragma once
-#include <jadel/jadel.h>
-#include "file.h"
+#include <jadel.h>
+//#include "file.h"
 #include "entity.h"
 #include "inventory.h"
 #include "gameobject.h"
@@ -31,7 +31,7 @@ enum
 
 struct ControlScheme
 {
-    jadel::Key keys[20];
+    uint32 keys[20];
     uint32 commands[20];
     uint32 numCommands;
 };
@@ -71,7 +71,7 @@ struct Portal
 
 struct Sector
 {
-    iPoint pos;
+    jadel::Point2i pos;
     const Tile* tile;
     Actor* occupant;
     Item* items[10];
@@ -83,7 +83,7 @@ struct AStarNode
 {
     bool isCalculated;
     bool isClosed;
-    iPoint pos;
+    jadel::Point2i pos;
     const Sector* sector;
     const AStarNode* sourceNode;
     int gCost;
@@ -125,7 +125,7 @@ struct Game
     uint32 numWorlds;
     World* currentWorld;
     uint32 currentState;
-    iPoint screenPos = {.x = 0, .y = 0};
+    jadel::Point2i screenPos = {.x = 0, .y = 0};
     Actor player;
 
     const Sector* path[100];
@@ -154,12 +154,12 @@ struct Game
     
 };
 
-iRect getSectorScreenPos(int x, int y);
-iRect getSectorScreenPos(iPoint pos);
-iRect getSectorScreenPos(const Sector* sector);
+jadel::Recti getSectorScreenPos(int x, int y);
+jadel::Recti getSectorScreenPos(jadel::Point2i pos);
+jadel::Recti getSectorScreenPos(const Sector* sector);
 void addSectorItem(Sector* sector, Item* item);
 Sector* getSectorFromPos(int x, int y);
-Sector* getSectorFromPos(iPoint pos);
+Sector* getSectorFromPos(jadel::Point2i pos);
 Sector* getSectorOfEntity(Entity* entity);
 Sector* getSectorOfGameObject(GameObject* gameObject);
 Sector* getSectorOfActor(Actor* actor);
