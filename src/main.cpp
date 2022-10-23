@@ -6,12 +6,10 @@
 //#include "file.h"
 #include <thread>
 #include "timer.h"
-
+#include "render.h"
 
 static int windowWidth = 800;
 static int windowHeight = 600;
-
-Game game;
 
 //int main(int argc, char** argv)
 int JadelMain()
@@ -19,13 +17,16 @@ int JadelMain()
     if (!JadelInit())
     {
         printf("Jadel init failed!\n");
+        return 0;
     }
-
+    srand(time(NULL));
     jadel::Window window;
     jadel::windowCreate(&window, "Rlike", windowWidth, windowHeight);     
     jadel::Surface winSurface;
     jadel::graphicsCreateSurface(windowWidth, windowHeight, &winSurface);
     uint32* winPixels = (uint32*)winSurface.pixels;
+    jadel::memoryInit(MB(5));
+    Game game;
     setGame(&game);
     if (!initGame(&window))
     {
@@ -38,11 +39,9 @@ int JadelMain()
     uint32 minFrameTime = 1000 / 60;
     while (true)
     {
-        
-        
         JadelUpdate();
         updateGame();
-        jadel::windowUpdate(&window, &game.workingBuffer);
+        jadel::windowUpdate(&window, getScreenBuffer());
         
         elapsedInMillis = frameTimer.getMillisSinceLastUpdate();
         if (elapsedInMillis < minFrameTime)

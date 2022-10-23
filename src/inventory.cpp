@@ -1,14 +1,14 @@
 #include "inventory.h"
 #include "game.h"
 
-void closeInventory(Inventory* inventory)
+void closeInventory(Inventory *inventory)
 {
-       currentGame->currentState = SUBSTATE_GAME;
-       inventory->useMode = false;
-       printf("Inventory closed\n");
+    currentGame->currentState = SUBSTATE_GAME;
+    inventory->useMode = false;
+    printf("Inventory closed\n");
 }
 
-void printInventory(const Inventory* inventory)
+void printInventory(const Inventory *inventory)
 {
     printf("Inventory: \n");
     int j = 1;
@@ -27,15 +27,15 @@ void printInventory(const Inventory* inventory)
     }
 }
 
-ItemSlot* askInventorySlot(Inventory* inventory)
+ItemSlot *askInventorySlot(Inventory *inventory)
 {
-    ItemSlot* slot = NULL;
+    ItemSlot *slot = NULL;
 
     for (int i = 1; i < 10; ++i)
     {
         int j = 0;
         if (jadel::inputIsKeyTyped(jadel::KEY_0 + i))
-        {               
+        {
             for (int itemIndex = 0; itemIndex < 10; ++itemIndex)
             {
                 if (currentGame->player.inventory.itemSlots[itemIndex].hasItem)
@@ -47,8 +47,7 @@ ItemSlot* askInventorySlot(Inventory* inventory)
                         break;
                     }
                 }
-            }                   
-                    
+            }
         }
     }
     return slot;
@@ -79,34 +78,23 @@ void updateSubstateInventory()
     }
     if (currentGame->player.inventory.useMode)
     {
-        ItemSlot* slot = askInventorySlot(&currentGame->player.inventory);
+        ItemSlot *slot = askInventorySlot(&currentGame->player.inventory);
         if (slot)
         {
-            Item* item = slot->item;
-            GameObject* pObj = &currentGame->player.gameObject;
-            switch (item->effect)
-            {
-                case ADJUST_HEALTH:
-                    pObj->health += item->value;
-                    if (pObj->health > 100) pObj->health = pObj->maxHealth;
-                    printf("You used %s\n", item->gameObject.entity.name);
-                    printf("Health: %d / %d\n",
-                           pObj->health,
-                           pObj->maxHealth);                                        
-            }
+            Item *item = slot->item;
+            useItem(item, &currentGame->player);
             slot->hasItem = false;
             printInventory(&currentGame->player.inventory);
- 
         }
     }
     if (currentGame->player.inventory.dropMode)
     {
-        ItemSlot* slot = askInventorySlot(&currentGame->player.inventory);
+        ItemSlot *slot = askInventorySlot(&currentGame->player.inventory);
         if (slot)
         {
             currentGame->player.inventory.dropMode = false;
             slot->hasItem = false;
-            Sector* currentSector = getSectorOfActor(&currentGame->player);
+            Sector *currentSector = getSectorOfActor(&currentGame->player);
             addSectorItem(currentSector, slot->item);
             printf("Dropped %s\n", slot->item->gameObject.entity.name);
             printInventory(&currentGame->player.inventory);
