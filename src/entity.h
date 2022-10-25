@@ -1,9 +1,11 @@
 #pragma once
-#include <jadel/jadel.h>
+#include <jadel.h>
 
 struct Entity
 {
-    uint32 GUID;
+    uint32 id;
     char name[20];
-    iPoint pos;    
+    jadel::Point2i pos;    
 };
+
+Entity createEntity(int x, int y);

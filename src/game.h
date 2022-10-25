@@ -1,10 +1,11 @@
 #pragma once
-#include <jadel/jadel.h>
-#include "file.h"
+#include <jadel.h>
 #include "entity.h"
 #include "inventory.h"
 #include "gameobject.h"
+#include "world.h"
 #include "actor.h"
+#include "timer.h"
 
 #define screenTilemapW (15)
 #define screenTilemapH (10)
@@ -13,6 +14,10 @@
 
 extern float frameTime;
 
+extern uint32 numIDs;
+extern uint32 numPortalIDs;
+
+
 enum
 {
     COMMAND_NULL = 0,
@@ -20,6 +25,10 @@ enum
     COMMAND_MOVE_RIGHT,
     COMMAND_MOVE_UP,
     COMMAND_MOVE_DOWN,
+    COMMAND_MOVE_UP_LEFT,
+    COMMAND_MOVE_UP_RIGHT,
+    COMMAND_MOVE_DOWN_RIGHT,
+    COMMAND_MOVE_DOWN_LEFT,
     COMMAND_TOGGLE_INVENTORY,
     COMMAND_DROP_ITEM,
     COMMAND_USE_ITEM,
@@ -31,9 +40,12 @@ enum
 
 struct ControlScheme
 {
-    jadel::Key keys[20];
-    uint32 commands[20];
-    uint32 numCommands;
+    uint32 keyPress[20];
+    uint32 keyPressCommands[20];
+    uint32 numKeyPressCommands;
+    uint32 keyType[20];
+    uint32 keyTypeCommands[20];
+    uint32 numKeyTypeCommands;
 };
 
 struct Game;
@@ -43,101 +55,38 @@ extern Game* currentGame;
 
 enum
 {
-    ADJUST_HEALTH = 0,
-    NUM_EFFECTS
-};
-
-enum
-{
     SUBSTATE_GAME = 0,
     SUBSTATE_INVENTORY,
     SUBSTATE_COUNT
 };
 
-
-struct Tile
-{
-    const jadel::Surface* surface;
-    bool barrier;
-};
-
-struct Portal
-{
-    const jadel::Surface* sprite;
-    uint32 linkID;
-    uint32 worldLinkID;
-    Sector* sector;
-};
-
-struct Sector
-{
-    iPoint pos;
-    const Tile* tile;
-    Actor* occupant;
-    Item* items[10];
-    uint32 numItems;
-    Portal* portal;
-};
-
-struct AStarNode
-{
-    bool isCalculated;
-    bool isClosed;
-    iPoint pos;
-    const Sector* sector;
-    const AStarNode* sourceNode;
-    int gCost;
-    int hCost;
-};
-
-struct World
-{
-    Entity entity;
-    int width;
-    int height;
-    Sector* sectors;
-    uint32 numGameObjects = 0;
-    GameObject* gameObjects[MAX_GAMEOBJECTS];
-    uint32 numActors = 0;
-    Actor* actors[MAX_ACTORS];
-    uint32 numItems = 0;
-    Item* items[MAX_GAMEOBJECTS];
-    Portal portals[10];
-    uint32 numPortals = 0;
-    AStarNode* pathNodes;
-    uint32 numCalculatedPathNodes = 0;
-    AStarNode** calculatedPathNodes;
-    jadel::Surface worldSurface;
-};
-
 struct Game
 {
     Actor* actors;
-    uint32 numActors;
+    uint32 numActors = 0;
     GameObject* gameObjects;
-    uint32 numGameObjects;
+    uint32 numGameObjects = 0;
     Item* items;
-    uint32 numItems;
+    uint32 numItems = 0;
     
     uint32 commandQueue[10];
     uint32 numCommands = 0;
     World* worlds;
-    uint32 numWorlds;
+    uint32 numWorlds = 0;
     World* currentWorld;
     uint32 currentState;
-    iPoint screenPos = {.x = 0, .y = 0};
+    jadel::Point2i screenPos = {.x = 0, .y = 0};
     Actor player;
-
-    const Sector* path[100];
-    uint32 pathLength = 0;
     
     int tileScreenW;
     int tileScreenH;
     Tile walkTile;
     Tile wallTile;
-    int pSteps = 0;
     jadel::Window* window;
 
+    Timer moveTimer;
+    bool playerCanMove;
+    size_t moveTimerMillis;
     bool updateGame = true;
     
     jadel::Surface playerSprite;
@@ -147,20 +96,30 @@ struct Game
     jadel::Surface clutterSprite;
     jadel::Surface poisonSprite;
     jadel::Surface hpackSprite;
-    jadel::Surface portalSprite;
-    jadel::Surface workingBuffer;
-    
+    jadel::Surface portalSprite;    
 };
 
-iRect getSectorScreenPos(int x, int y);
-iRect getSectorScreenPos(iPoint pos);
-iRect getSectorScreenPos(const Sector* sector);
+jadel::Recti getSectorScreenPos(int x, int y);
+jadel::Recti getSectorScreenPos(jadel::Point2i pos);
+jadel::Recti getSectorScreenPos(const Sector* sector);
 void addSectorItem(Sector* sector, Item* item);
+void initSector(int x, int y, const Tile *tile, Sector *target);
 Sector* getSectorFromPos(int x, int y);
-Sector* getSectorFromPos(iPoint pos);
+Sector* getSectorFromPos(jadel::Point2i pos);
 Sector* getSectorOfEntity(Entity* entity);
 Sector* getSectorOfGameObject(GameObject* gameObject);
 Sector* getSectorOfActor(Actor* actor);
+World *getWorldByID(uint32 ID);
+
+Entity createEntity(int x, int y);
+
+GameObject createGameObject(int x, int y, AnimFrames frames, const char *name);
+
+Item createItem(int x, int y, AnimFrames frames, const char *name, uint32 flags);
+
+Item createHealthItem(int x, int y, AnimFrames frames, const char *name, int healthModifier);
+
+Item createIlluminatorItem(int x, int y, AnimFrames frames, const char *name, float illumination);
 
 
 void setGame(Game* game);
