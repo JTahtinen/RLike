@@ -6,9 +6,11 @@
 #include "world.h"
 #include "actor.h"
 #include "timer.h"
+#include <string>
+#include <vector>
 
-#define screenTilemapW (15)
-#define screenTilemapH (10)
+extern int screenTilemapW;
+extern int screenTilemapH;
 #define MAX_ACTORS (50)
 #define MAX_GAMEOBJECTS (200)
 
@@ -60,6 +62,19 @@ enum
     SUBSTATE_COUNT
 };
 
+struct AssetCollection
+{
+    //jadel::Vector<jadel::Surface> surfaces;
+    //jadel::Vector<jadel::String> names;
+
+    std::vector<jadel::Surface> surfaces;
+    std::vector<std::string> names;
+    
+    jadel::Surface* getSurface(const char* name);
+    void pushSurface(jadel::Surface surface, const char* name);
+    bool loadSurface(const char* filepath);
+};
+
 struct Game
 {
     Actor* actors;
@@ -85,18 +100,13 @@ struct Game
     jadel::Window* window;
 
     Timer moveTimer;
+    Timer spriteTimer;
     bool playerCanMove;
     size_t moveTimerMillis;
+    size_t spriteTimerMillis;
     bool updateGame = true;
-    
-    jadel::Surface playerSprite;
-    jadel::Surface playerSpriteLeft;
-    jadel::Surface walkSurface;
-    jadel::Surface wallSurface;
-    jadel::Surface clutterSprite;
-    jadel::Surface poisonSprite;
-    jadel::Surface hpackSprite;
-    jadel::Surface portalSprite;    
+
+    AssetCollection assets;  
 };
 
 jadel::Recti getSectorScreenPos(int x, int y);
@@ -110,6 +120,8 @@ Sector* getSectorOfEntity(Entity* entity);
 Sector* getSectorOfGameObject(GameObject* gameObject);
 Sector* getSectorOfActor(Actor* actor);
 World *getWorldByID(uint32 ID);
+
+uint32 getPlayerWeaponID();
 
 Entity createEntity(int x, int y);
 

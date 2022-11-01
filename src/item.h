@@ -7,6 +7,15 @@ enum
 {
     ITEM_EFFECT_ADJUST_HEALTH = 1,
     ITEM_EFFECT_ILLUMINATE = 1 << 1,
+    ITEM_EFFECT_WEAPON = 1 << 2,
+    ITEM_EFFECT_CONSUMABLE = 1 << 3,
+    ITEM_EFFECT_EQUIPPABLE = 1 << 4
+};
+
+struct DamageRange
+{
+    uint32 numDice;
+    uint32 numFaces;
 };
 
 struct Item
@@ -18,7 +27,11 @@ struct Item
 
     float illumination;
     int distanceFromGround;
+
+    DamageRange damage;
 };
+
+uint32 calculateDamage(DamageRange damageRange);
 
 void useItem(Item *item, Actor *actor);
 
@@ -27,3 +40,5 @@ Item createItem(int x, int y, AnimFrames frames, const char *name, uint32 flags)
 Item createHealthItem(int x, int y, AnimFrames frames, const char *name, int healthModifier);
 
 Item createIlluminatorItem(int x, int y, AnimFrames frames, const char *name, float illumination);
+
+Item createWeaponItem(int x, int y, AnimFrames frames, const char* name, uint32 numDice, uint32 numFaces);

@@ -1,5 +1,13 @@
 #include "item.h"
 #include "actor.h"
+#include "dice.h"
+#include "game.h"
+
+uint32 calculateDamage(DamageRange damageRange)
+{
+    uint32 result = rollDice(damageRange.numDice, damageRange.numFaces);
+    return result;
+}
 
 void useItem(Item *item, Actor *actor)
 {
@@ -10,6 +18,16 @@ void useItem(Item *item, Actor *actor)
         actorObj->health += item->healthModifier;
         if (actorObj->health > actorObj->maxHealth)
             actorObj->health = actorObj->maxHealth;
+    }
+    if (item->flags & ITEM_EFFECT_EQUIPPABLE)
+    {
+        if (item->flags & ITEM_EFFECT_WEAPON)
+        {
+            if (getPlayerWeaponID() == item->gameObject.entity.id)
+                actor->equippedWeapon = NULL;
+            else
+                actor->equippedWeapon = item;
+        }
     }
 }
 
@@ -23,7 +41,7 @@ Item createItem(int x, int y, AnimFrames frames, const char *name, uint32 flags)
 
 Item createHealthItem(int x, int y, AnimFrames frames, const char *name, int healthModifier)
 {
-    Item item = createItem(x, y, frames, name, ITEM_EFFECT_ADJUST_HEALTH);
+    Item item = createItem(x, y, frames, name, ITEM_EFFECT_ADJUST_HEALTH | ITEM_EFFECT_CONSUMABLE);
     item.healthModifier = healthModifier;
     return item;
 }
@@ -36,3 +54,9 @@ Item createIlluminatorItem(int x, int y, AnimFrames frames, const char *name, fl
     return item;
 }
 
+Item createWeaponItem(int x, int y, AnimFrames frames, const char* name, uint32 numDice, uint32 numFaces)
+{
+    Item item = createItem(x, y, frames, name, ITEM_EFFECT_WEAPON | ITEM_EFFECT_EQUIPPABLE);
+    item.damage = {numDice, numFaces};
+    return item;
+}

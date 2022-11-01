@@ -1,5 +1,6 @@
 #include "actor.h"
 #include "game.h"
+#include "dice.h"
 
 void Actor::clearPath()
 {
@@ -21,11 +22,17 @@ int getArmorClassRating(const Actor* actor)
 
 bool rollAttackHit(const Actor* attacker, const Actor* attackTarget)
 {
-    int diceRoll = (rand() % 20) + 1;
+    int diceRoll = rollDie(20);
     if (diceRoll == 20) return true;
     if (diceRoll == 1) return false;
     int modifiedAttack = diceRoll + getStrengthModifier(attacker);
     bool result = (modifiedAttack >= getArmorClassRating(attackTarget));
+    return result;
+}
+
+int rollInitiative(Actor* actor)
+{
+    int result = rollDie(20) + ATTRIB_MODIFIER(actor->attrib.dexterity);
     return result;
 }
 
@@ -40,7 +47,7 @@ void initDefaultAttributes(Attributes *attrib)
 {
     attrib->strength = 10;
     attrib->dexterity = 10;
-    attrib->constitution = 10;
+    attrib->constitution = 30;
     attrib->intelligence = 10;
     attrib->wisdom = 10;
     attrib->charisma = 10;
@@ -60,6 +67,7 @@ Actor createActor(int x, int y, AnimFrames frames, const char *name, Attributes 
     result.attrib = *attrib;
     result.gameObject = createGameObject(x, y, frames, name);
     setMaxHealth(&result, calculateMaxHealth(&result));
+    result.equippedWeapon = NULL;
     result.transit.inTransit = false;
     result.transit.startSector = NULL;
     result.transit.endSector = NULL;

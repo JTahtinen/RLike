@@ -8,17 +8,17 @@
 #include "timer.h"
 #include "render.h"
 
-static int windowWidth = 800;
-static int windowHeight = 600;
+static int windowWidth = 1280;
+static int windowHeight = 720;
 
-//int main(int argc, char** argv)
 int JadelMain()
 {
     if (!JadelInit())
     {
-        printf("Jadel init failed!\n");
+        jadel::message("Jadel init failed!\n");
         return 0;
     }
+    jadel::allocateConsole();
     srand(time(NULL));
     jadel::Window window;
     jadel::windowCreate(&window, "Rlike", windowWidth, windowHeight);     
@@ -30,7 +30,7 @@ int JadelMain()
     setGame(&game);
     if (!initGame(&window))
     {
-        printf("Game init failed!\n");
+        jadel::message("Game init failed!\n");
         exit(0);
     }
     Timer frameTimer;
@@ -54,7 +54,7 @@ int JadelMain()
         }
 
         //uint32 debugTime = frameTimer.getMillisSinceLastUpdate();
-//        printf("%f\n", frameTime);
+//        jadel::message("%f\n", frameTime);
         
         frameTimer.update();
     }

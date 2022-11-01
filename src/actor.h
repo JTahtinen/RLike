@@ -29,6 +29,7 @@ struct Actor
     Inventory inventory;
     Attributes attrib;
     uint32 armorClass;
+    Item* equippedWeapon;
     Transit transit;    
     uint32 commandInQueue;
     const Sector* path[100];
@@ -44,6 +45,8 @@ int getStrengthModifier(const Actor* actor);
 int getArmorClassRating(const Actor* actor);
 
 bool rollAttackHit(const Actor* attacker, const Actor* attackTarget);
+
+int rollInitiative(Actor* actor);
 
 int calculateMaxHealth(const Actor* actor);
 

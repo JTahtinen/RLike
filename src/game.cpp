@@ -4,13 +4,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+#include "render.h"
 #include "inventory.h"
+#include "dice.h"
+#include <string>
 
 Game *currentGame;
-uint32 numIDs = 0;
-uint32 numPortalIDs = 0;
+uint32 numIDs = 1;
+uint32 numPortalIDs = 1;
+
+int screenTilemapW;
+int screenTilemapH;
 
 static ControlScheme gameCommands;
 
@@ -18,6 +22,32 @@ float frameTime = 0;
 
 void resetPathNodes(World *world);
 
+jadel::Surface *AssetCollection::getSurface(const char* name)
+{
+    for (size_t i = 0; i < names.size(); ++i)
+    {
+        if (strncmp(names[i].c_str(), name, names[i].size()) == 0)
+        {
+            return &surfaces[i];
+        }
+    }
+    return getSurface("res/missing.png");
+}
+
+void AssetCollection::pushSurface(jadel::Surface surface, const char* name)
+{
+    this->surfaces.emplace_back(surface);
+    this->names.emplace_back(std::string(name));
+}
+
+bool AssetCollection::loadSurface(const char *filepath)
+{
+    jadel::Surface target;
+    if (!load_PNG(filepath, &target))
+        return false;
+    pushSurface(target, filepath);
+    return true;
+}
 
 World *getWorldByID(uint32 ID)
 {
@@ -58,6 +88,12 @@ void setGame(Game *game)
     currentGame = game;
 }
 
+uint32 getPlayerWeaponID()
+{
+    if (!currentGame->player.equippedWeapon)
+        return 0;
+    return currentGame->player.equippedWeapon->gameObject.entity.id;
+}
 
 /*
 void pushItem(int x, int y, AnimFrames frames, const char *name, uint32 effect, int value, World *world)
@@ -65,13 +101,12 @@ void pushItem(int x, int y, AnimFrames frames, const char *name, uint32 effect, 
     pushItem(createItem(x, y, frames, name, effect, value), world);
 }*/
 
-
 jadel::Recti getSectorScreenPos(int x, int y)
 {
-    jadel::Recti result = {.x = (x - currentGame->screenPos.x) * currentGame->tileScreenW,
-                           .y = (y - currentGame->screenPos.y) * currentGame->tileScreenH,
-                           .w = currentGame->tileScreenW,
-                           .h = currentGame->tileScreenH};
+    jadel::Recti result = {.x0 = (x - currentGame->screenPos.x) * currentGame->tileScreenW,
+                           .y0 = (y - currentGame->screenPos.y) * currentGame->tileScreenH,
+                           .x1 = currentGame->tileScreenW,
+                           .y1 = currentGame->tileScreenH};
     return result;
 }
 
@@ -105,8 +140,6 @@ Sector *getSectorOfActor(Actor *actor)
     Sector *result = getSectorOfGameObject(&actor->gameObject);
     return result;
 }
-
-
 
 void setSectorOccupant(int x, int y, Actor *occupant)
 {
@@ -152,7 +185,7 @@ bool moveTo(Sector *sector, Actor *actor)
         nextSector->occupant = actor;
         return true;
     }
-    printf("You hit a wall!\n");
+    jadel::message("You hit a wall!\n");
     return false;
 }
 
@@ -176,7 +209,7 @@ bool move(int x, int y, Actor *actor)
         nextSector->occupant = actor;
         return true;
     }
-    printf("You hit a wall!\n");
+    jadel::message("You hit a wall!\n");
     return false;
 }
 
@@ -184,18 +217,25 @@ void attack(Actor *attacker, Actor *target)
 {
     if (!target)
     {
-        printf("No target to attack!\n");
+        jadel::message("No target to attack!\n");
         return;
     }
     bool attackHit = rollAttackHit(attacker, target);
     if (!attackHit)
+    {
+        jadel::message("%s's attack missed\n", attacker->gameObject.entity.name);
         return;
-    int damage = getStrengthModifier(attacker) + 1; // unarmed strike
+    }
+    uint32 damage;
+    if (!attacker->equippedWeapon)
+        damage = getStrengthModifier(attacker) + 1; // unarmed strike
+    else
+        damage = calculateDamage(attacker->equippedWeapon->damage) + getStrengthModifier(attacker);
     GameObject *gameObject = &target->gameObject;
     gameObject->health -= damage;
     if (gameObject->health < 0)
         gameObject->health = 0;
-    printf("%s dealt %d damage to %s ! %s's hp: %d\n",
+    jadel::message("%s dealt %d damage to %s ! %s's hp: %d\n",
            attacker->gameObject.entity.name,
            damage,
            target->gameObject.entity.name,
@@ -204,7 +244,7 @@ void attack(Actor *attacker, Actor *target)
     if (gameObject->health <= 0)
     {
         gameObject->alive = false;
-        printf("%s was killed...\n", target->gameObject.entity.name);
+        jadel::message("%s was killed...\n", target->gameObject.entity.name);
     }
 }
 
@@ -213,7 +253,10 @@ void combat(Actor *actor0, Actor *actor1)
     Actor *firstAttacker;
     Actor *secondAttacker;
 
-    if (actor0->attrib.dexterity == actor1->attrib.dexterity)
+    int actor0Initiative = rollInitiative(actor0);
+    int actor1Initiative = rollInitiative(actor1);
+
+    if (actor0Initiative == actor1Initiative)
     {
         if (rand() % 2 == 0)
         {
@@ -226,7 +269,7 @@ void combat(Actor *actor0, Actor *actor1)
             secondAttacker = actor0;
         }
     }
-    else if (actor0->attrib.dexterity > actor1->attrib.dexterity)
+    else if (actor0Initiative > actor1Initiative)
     {
         firstAttacker = actor0;
         secondAttacker = actor1;
@@ -502,43 +545,25 @@ jadel::Point2i getCameraRight(jadel::Point2i camera)
     return result;
 }
 
-bool load_PNG(const char *filename, jadel::Surface *target)
-{
-    int width;
-    int height;
-    int channels;
-    target->pixels = stbi_load(filename, &width, &height, &channels, 0);
-    if (!target->pixels)
-        return false;
-    for (int i = 0; i < width * height; ++i)
-    {
-        uint8 *pixel = (uint8 *)target->pixels + (4 * i);
-        jadel::flipBytes(pixel, 3);
-    }
-    target->width = width;
-    target->height = height;
-    return true;
-}
-
 bool initGame(jadel::Window *window)
 {
     if (!currentGame)
     {
-        printf("Could not init game. Null game pointer.\n");
+        jadel::message("Could not init game. Null game pointer.\n");
         return false;
     }
     if (!window)
     {
-        printf("Could not init game. Null window pointer.\n");
+        jadel::message("Could not init game. Null window pointer.\n");
         return false;
     }
-
-    stbi_set_flip_vertically_on_load(true);
 
     if (!initRender(window))
     {
         return false;
     }
+    screenTilemapW = 16;
+    screenTilemapH = 9;
     currentGame->tileScreenW = window->width / screenTilemapW;
     currentGame->tileScreenH = window->height / screenTilemapH;
 
@@ -562,43 +587,51 @@ bool initGame(jadel::Window *window)
     // currentGame->worlds = (World *)malloc(2 * sizeof(World));
     currentGame->worlds = (World *)jadel::memoryReserve(2 * sizeof(World));
     currentGame->numWorlds = 2;
-
-    if (!load_PNG("res/dude1.png", &currentGame->playerSprite))
-        return false;
-    if (!load_PNG("res/dude1l.png", &currentGame->playerSpriteLeft))
-        return false;
-    if (!load_PNG("res/clutter.png", &currentGame->clutterSprite))
-        return false;
-    if (!load_PNG("res/grass.png", &currentGame->walkSurface))
-        return false;
-    if (!load_PNG("res/wall.png", &currentGame->wallSurface))
-        return false;
-    if (!load_PNG("res/poison.png", &currentGame->poisonSprite))
-        return false;
-    if (!load_PNG("res/hpotion.png", &currentGame->hpackSprite))
-        return false;
-    if (!load_PNG("res/portal.png", &currentGame->portalSprite))
-        return false;
-
+    AssetCollection &assets = currentGame->assets;
+    //jadel::vectorInit(50, &assets.surfaces);
+    //jadel::vectorInit(50, &assets.names);
+    assets.loadSurface("res/missing.png");
+    assets.loadSurface("res/dude1.png");
+    assets.loadSurface("res/dude1l.png");
+    assets.loadSurface("res/clutter.png");
+    assets.loadSurface("res/grass.png");
+    assets.loadSurface("res/wall.png");
+    assets.loadSurface("res/poison.png");
+    assets.loadSurface("res/poison2.png");
+    assets.loadSurface("res/poison3.png");
+    assets.loadSurface("res/hpotion.png");
+    assets.loadSurface("res/hpotion2.png");
+    assets.loadSurface("res/hpotion3.png");
+    assets.loadSurface("res/portal.png");
+    assets.loadSurface("res/dagger.png");
+    
     currentGame->actors = (Actor *)jadel::memoryReserve(MAX_ACTORS * sizeof(Actor));
     currentGame->items = (Item *)jadel::memoryReserve(MAX_GAMEOBJECTS * sizeof(Item));
     currentGame->gameObjects = (GameObject *)jadel::memoryReserve(MAX_GAMEOBJECTS * sizeof(GameObject));
 
     AnimFrames playerFrames;
-    playerFrames.sprites[0] = &currentGame->playerSprite;
-    playerFrames.sprites[1] = &currentGame->playerSpriteLeft;
+    playerFrames.sprites[0] = assets.getSurface("res/dude1.png");
+    playerFrames.sprites[1] = assets.getSurface("res/dude1l.png");
     playerFrames.numFrames = 2;
 
     AnimFrames healthPackFrames;
-    healthPackFrames.sprites[0] = &currentGame->hpackSprite;
-    healthPackFrames.numFrames = 1;
+    healthPackFrames.sprites[0] = assets.getSurface("res/hpotion.png");
+    healthPackFrames.sprites[1] = assets.getSurface("res/hpotion2.png");
+    healthPackFrames.sprites[2] = assets.getSurface("res/hpotion3.png");
+    healthPackFrames.numFrames = 3;
 
     AnimFrames poisonFrames;
-    poisonFrames.sprites[0] = &currentGame->poisonSprite;
-    poisonFrames.numFrames = 1;
+    poisonFrames.sprites[0] = assets.getSurface("res/poison.png");
+    poisonFrames.sprites[1] = assets.getSurface("res/poison2.png");
+    poisonFrames.sprites[2] = assets.getSurface("res/poison3.png");
+    poisonFrames.numFrames = 3;
 
-    currentGame->walkTile = {.surface = &currentGame->walkSurface, .barrier = false};
-    currentGame->wallTile = {.surface = &currentGame->wallSurface, .barrier = true};
+    AnimFrames daggerFrames;
+    daggerFrames.sprites[0] = assets.getSurface("res/dagger.png");
+    daggerFrames.numFrames = 1;
+
+    currentGame->walkTile = {.surface = assets.getSurface("res/grass.png"), .barrier = false};
+    currentGame->wallTile = {.surface = assets.getSurface("res/wall.png"), .barrier = true};
 
     initWorld(20, 10, &currentGame->worlds[0]);
     initWorld(8, 7, &currentGame->worlds[1]);
@@ -606,7 +639,7 @@ bool initGame(jadel::Window *window)
     Attributes playerAttrib = {
         .strength = 14,
         .dexterity = 12,
-        .constitution = 15,
+        .constitution = 30,
         .intelligence = 11,
         .wisdom = 10,
         .charisma = 10};
@@ -619,15 +652,18 @@ bool initGame(jadel::Window *window)
     pushItem(createHealthItem(6, 5, healthPackFrames, "health pack", 20), &currentGame->worlds[1]);
     pushItem(createHealthItem(8, 6, poisonFrames, "poison", -10), &currentGame->worlds[0]);
     pushItem(createHealthItem(9, 4, healthPackFrames, "health pack", 20), &currentGame->worlds[0]);
+    pushItem(createHealthItem(10, 4, healthPackFrames, "health pack", 20), &currentGame->worlds[0]);
+    pushItem(createHealthItem(9, 5, healthPackFrames, "health pack", 20), &currentGame->worlds[0]);
     pushItem(createHealthItem(9, 4, poisonFrames, "poison", -10), &currentGame->worlds[0]);
     pushItem(createIlluminatorItem(6, 5, {0}, "Light", 150.0f), &currentGame->worlds[0]);
     pushItem(createIlluminatorItem(18, 3, {0}, "Light", 150.0f), &currentGame->worlds[0]);
     pushItem(createIlluminatorItem(3, 3, {0}, "Light", 150.0f), &currentGame->worlds[1]);
+    pushItem(createWeaponItem(7, 4, daggerFrames, "Dagger", 2, 6), &currentGame->worlds[0]);
     resetPathNodes(&currentGame->worlds[0]);
     resetPathNodes(&currentGame->worlds[1]);
 
-    currentGame->worlds[0].portals[0] = {&currentGame->portalSprite, 1, currentGame->worlds[1].entity.id, &currentGame->worlds[0].sectors[2]};
-    currentGame->worlds[1].portals[0] = {&currentGame->portalSprite, 1, currentGame->worlds[0].entity.id, &currentGame->worlds[1].sectors[3 + 4 * currentGame->worlds[1].width]};
+    currentGame->worlds[0].portals[0] = {assets.getSurface("res/portal.png"), 1, currentGame->worlds[1].entity.id, &currentGame->worlds[0].sectors[2]};
+    currentGame->worlds[1].portals[0] = {assets.getSurface("res/portal.png"), 1, currentGame->worlds[0].entity.id, &currentGame->worlds[1].sectors[3 + 4 * currentGame->worlds[1].width]};
     currentGame->worlds[0].numPortals++;
     currentGame->worlds[1].numPortals++;
 
@@ -695,6 +731,8 @@ bool initGame(jadel::Window *window)
     currentGame->window = window;
     currentGame->playerCanMove = true;
     currentGame->moveTimerMillis = 0;
+    currentGame->spriteTimerMillis = 0;
+    currentGame->spriteTimer.start();
     return true;
 }
 
@@ -830,7 +868,8 @@ void updateSubstateGame()
         {
             if (currentGame->playerCanMove)
             {
-                if (tryToMove(-20, 0, &currentGame->player)) playerMoved = true;
+                if (tryToMove(-20, 0, &currentGame->player))
+                    playerMoved = true;
                 playerFrames->currentFrameIndex = 1;
                 currentGame->updateGame = true;
             }
@@ -840,7 +879,8 @@ void updateSubstateGame()
         {
             if (currentGame->playerCanMove)
             {
-                if (tryToMove(20, 0, &currentGame->player)) playerMoved = true;
+                if (tryToMove(20, 0, &currentGame->player))
+                    playerMoved = true;
                 playerFrames->currentFrameIndex = 0;
                 currentGame->updateGame = true;
             }
@@ -850,7 +890,8 @@ void updateSubstateGame()
         {
             if (currentGame->playerCanMove)
             {
-                if (tryToMove(0, 20, &currentGame->player)) playerMoved = true;
+                if (tryToMove(0, 20, &currentGame->player))
+                    playerMoved = true;
                 currentGame->updateGame = true;
             }
             break;
@@ -859,7 +900,8 @@ void updateSubstateGame()
         {
             if (currentGame->playerCanMove)
             {
-                if (tryToMove(0, -20, &currentGame->player)) playerMoved = true;
+                if (tryToMove(0, -20, &currentGame->player))
+                    playerMoved = true;
                 currentGame->updateGame = true;
             }
             break;
@@ -891,17 +933,17 @@ void updateSubstateGame()
                     Item *item = sector->items[sector->numItems - 1];
                     slot->item = item;
                     --sector->numItems;
-                    printf("Picked up %s\n", item->gameObject.entity.name);
+                    jadel::message("Picked up %s\n", item->gameObject.entity.name);
                     slot->hasItem = true;
                 }
                 else
                 {
-                    printf("Inventory full!\n");
+                    jadel::message("Inventory full!\n");
                 }
             }
             else
             {
-                printf("Nothing to pick up\n");
+                jadel::message("Nothing to pick up\n");
             }
             break;
         }
@@ -910,20 +952,20 @@ void updateSubstateGame()
             Sector *curSector = getSectorOfEntity(&currentGame->player.gameObject.entity);
             if (curSector->numItems == 0)
             {
-                printf("Nothing here...\n");
+                jadel::message("Nothing here...\n");
             }
             else
             {
-                printf("You see:\n");
+                jadel::message("You see:\n");
                 for (int i = 0; i < curSector->numItems; ++i)
                 {
-                    printf("%d: %s\n", i + 1, curSector->items[i]->gameObject.entity.name);
+                    jadel::message("%d: %s\n", i + 1, curSector->items[i]->gameObject.entity.name);
                 }
             }
             break;
         }
         default:
-            printf("Invalid action\n");
+            jadel::message("Invalid action\n");
             break;
         }
     }
@@ -995,6 +1037,7 @@ void updateGame()
     {
         exit(0);
     }
+    //jadel::message("%f %f\n", jadel::inputGetMouseXRelative(), jadel::inputGetMouseYRelative());
     if (!currentGame->playerCanMove)
     {
         currentGame->moveTimerMillis = currentGame->moveTimer.getMillisSinceLastUpdate();
@@ -1013,13 +1056,28 @@ void updateGame()
         updateSubstateInventory();
         break;
     default:
-        printf("Trying to update nonexistent substate");
+        jadel::message("Trying to update nonexistent substate\n");
         break;
     }
 
     // if (currentGame->updateGame)
     if (true)
     {
+        currentGame->spriteTimerMillis += currentGame->spriteTimer.getMillisSinceLastUpdate();
+        currentGame->spriteTimer.update();
+        if (currentGame->spriteTimerMillis >= 333)
+        {
+            currentGame->spriteTimerMillis %= 333;
+            jadel::Vector<Item *> &items = currentGame->currentWorld->items;
+            for (size_t i = 0; i < items.size; ++i)
+            {
+                items[i]->gameObject.frames.currentFrameIndex++;
+                if (items[i]->gameObject.frames.currentFrameIndex >= items[i]->gameObject.frames.numFrames)
+                {
+                    items[i]->gameObject.frames.currentFrameIndex = items[i]->gameObject.frames.currentFrameIndex = 0;
+                }
+            }
+        }
         auto actors = getActors();
         for (int i = 0; i < actors.size; ++i)
         {

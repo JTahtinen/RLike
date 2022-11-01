@@ -106,13 +106,13 @@ bool setPortal(int x0, int y0, uint32 world0ID, int x1, int y1, uint32 world1ID)
     Sector *sector1 = getSectorFromPos(x1, y1, world1);
 
     world0->portals[world0->numPortals] = {
-        .sprite = &currentGame->portalSprite,
+        .sprite = currentGame->assets.getSurface("res/portal.png"),
         .linkID = numPortalIDs,
         .worldLinkID = world1ID,
         .sector = sector0};
 
     world1->portals[world1->numPortals] = {
-        .sprite = &currentGame->portalSprite,
+        .sprite = currentGame->assets.getSurface("res/portal.png"),
         .linkID = numPortalIDs,
         .worldLinkID = world0ID,
         .sector = sector1};
@@ -148,9 +148,9 @@ bool initWorld(int width, int height, World *world)
         for (int x = 0; x < width; ++x)
         {
             Sector *currentSector = &world->sectors[x + y * width];
-            if (x % 3 == 0 && y % 3 == 0)
-                initSector(x, y, &currentGame->wallTile, currentSector);
-            else
+          //  if (x % 3 == 0 && y % 3 == 0)
+          //      initSector(x, y, &currentGame->wallTile, currentSector);
+          //  else
                 initSector(x, y, &currentGame->walkTile, currentSector);
             AStarNode *node = &world->pathNodes[x + y * width];
             node->pos = {x, y};

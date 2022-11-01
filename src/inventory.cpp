@@ -5,12 +5,12 @@ void closeInventory(Inventory *inventory)
 {
     currentGame->currentState = SUBSTATE_GAME;
     inventory->useMode = false;
-    printf("Inventory closed\n");
+    jadel::message("Inventory closed\n");
 }
 
 void printInventory(const Inventory *inventory)
 {
-    printf("Inventory: \n");
+    jadel::message("Inventory: \n");
     int j = 1;
     bool inventoryEmpty = true;
     for (int i = 0; i < 10; ++i)
@@ -18,12 +18,12 @@ void printInventory(const Inventory *inventory)
         if (currentGame->player.inventory.itemSlots[i].hasItem)
         {
             inventoryEmpty = false;
-            printf("%d: %s\n", j++, inventory->itemSlots[i].item->gameObject.entity.name);
+            jadel::message("%d: %s\n", j++, inventory->itemSlots[i].item->gameObject.entity.name);
         }
     }
     if (inventoryEmpty)
     {
-        printf("Empty\n");
+        jadel::message("Empty\n");
     }
 }
 
@@ -65,7 +65,7 @@ void updateSubstateInventory()
         currentGame->player.inventory.useMode = !currentGame->player.inventory.useMode;
         if (currentGame->player.inventory.useMode)
         {
-            printf("Use item (1-9)\n");
+            jadel::message("Use item (1-9)\n");
         }
     }
     if (jadel::inputIsKeyTyped(jadel::KEY_D))
@@ -73,7 +73,7 @@ void updateSubstateInventory()
         currentGame->player.inventory.dropMode = !currentGame->player.inventory.dropMode;
         if (currentGame->player.inventory.dropMode)
         {
-            printf("Drop item (1-9)\n");
+            jadel::message("Drop item (1-9)\n");
         }
     }
     if (currentGame->player.inventory.useMode)
@@ -83,7 +83,8 @@ void updateSubstateInventory()
         {
             Item *item = slot->item;
             useItem(item, &currentGame->player);
-            slot->hasItem = false;
+            if (item->flags & ITEM_EFFECT_CONSUMABLE)
+                slot->hasItem = false;
             printInventory(&currentGame->player.inventory);
         }
     }
@@ -96,7 +97,7 @@ void updateSubstateInventory()
             slot->hasItem = false;
             Sector *currentSector = getSectorOfActor(&currentGame->player);
             addSectorItem(currentSector, slot->item);
-            printf("Dropped %s\n", slot->item->gameObject.entity.name);
+            jadel::message("Dropped %s\n", slot->item->gameObject.entity.name);
             printInventory(&currentGame->player.inventory);
         }
     }

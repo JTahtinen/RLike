@@ -6,6 +6,7 @@ GameObject createGameObject(int x, int y, AnimFrames frames, const char *name)
     result.entity = createEntity(x, y);
     result.posInsideSquare = {.x = 0, .y = 0};
     result.frames = frames;
+    result.frames.currentFrameIndex = 0;
     result.maxHealth = 100;
     result.health = result.maxHealth;
     strncpy(result.entity.name, name, sizeof(result.entity.name));
