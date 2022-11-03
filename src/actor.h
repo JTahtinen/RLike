@@ -50,6 +50,12 @@ int rollInitiative(Actor* actor);
 
 int calculateMaxHealth(const Actor* actor);
 
+const jadel::Surface* getCurrentFrame(const Actor* actor);
+
+bool setFrame(int index, Actor* actor);
+
+void setNextFrame(Actor* actor);
+
 Actor createActor(int x, int y, AnimFrames frames, const char *name, Attributes *attrib);
 
 Actor createActor(int x, int y, AnimFrames frames, const char *name);

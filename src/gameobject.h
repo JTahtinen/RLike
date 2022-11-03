@@ -19,3 +19,9 @@ struct GameObject
 };
 
 GameObject createGameObject(int x, int y, AnimFrames frames, const char *name);
+
+const jadel::Surface* getCurrentFrame(const GameObject* gameObject);
+
+bool setFrame(int index, GameObject* gameObject);
+
+void setNextFrame(GameObject* gameObject);

@@ -13,3 +13,28 @@ GameObject createGameObject(int x, int y, AnimFrames frames, const char *name)
     result.alive = true;
     return result;
 }
+
+const jadel::Surface* getCurrentFrame(const GameObject* gameObject)
+{
+    if (!gameObject) return NULL;
+    const jadel::Surface* result = gameObject->frames.sprites[gameObject->frames.currentFrameIndex];
+    return result;
+}
+
+bool setFrame(int index, GameObject* gameObject)
+{
+    if (!gameObject || index >= gameObject->frames.numFrames) return false;
+    gameObject->frames.currentFrameIndex = index;
+    return true;
+}
+
+void setNextFrame(GameObject* gameObject)
+{
+    if (!gameObject) return;
+    AnimFrames* frames = &gameObject->frames;
+    ++frames->currentFrameIndex;
+    if (frames->currentFrameIndex >= frames->numFrames)
+    {
+        frames->currentFrameIndex = 0;
+    }
+}

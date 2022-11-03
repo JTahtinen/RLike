@@ -61,6 +61,26 @@ void setMaxHealth(Actor *actor, int health)
     actor->gameObject.health = health;
 }
 
+const jadel::Surface* getCurrentFrame(const Actor* actor)
+{
+    if (!actor) return NULL;
+    const jadel::Surface* result = getCurrentFrame(&actor->gameObject);
+    return result;
+}
+
+bool setFrame(int index, Actor* actor)
+{
+    if (!actor) return false;
+    setFrame(index, &actor->gameObject);
+    return true;
+}
+
+void setNextFrame(Actor* actor)
+{
+    if (!actor) return;
+    setNextFrame(&actor->gameObject);
+}
+
 Actor createActor(int x, int y, AnimFrames frames, const char *name, Attributes *attrib)
 {
     Actor result;
@@ -76,10 +96,7 @@ Actor createActor(int x, int y, AnimFrames frames, const char *name, Attributes 
     result.pathLength = 0;
     result.pathStepsTaken = 0;
     result.followingPath = false;
-    for (int i = 0; i < 10; ++i)
-    {
-        result.inventory.itemSlots[i].hasItem = false;
-    }
+    initInventory(&result.inventory);
     return result;
 }
 
