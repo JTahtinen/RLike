@@ -1,10 +1,28 @@
 #include "inventory.h"
 #include "game.h"
+#include "render.h"
+
+static jadel::Surface inventorySurface;
+static jadel::Color idleHeaderColor = {0.6f, 0.2f, 0.3f, 0.8f};
+static jadel::Color hoverHeaderColor = {0.6f, 0.3f, 0.4f, 1.0f};
+static jadel::Color hookedHeaderColor = {0.6f, 0.8f, 0.6f, 1.0f};
+static jadel::Color itemBGIdleColor = {1.0f, 0.2f, 0.3f, 0.8f};
+static jadel::Color itemBGHoverColor = {1.0f, 0.3f, 0.4f, 1.0f};
+static const float SpriteSize = 1.5f;
+
+bool systemInitInventory()
+{
+    if (!load_PNG("res/inventory3.png", &inventorySurface))
+        return false;
+    return true;
+}
 
 void closeInventory(Inventory *inventory)
 {
     currentGame->currentState = SUBSTATE_GAME;
     inventory->useMode = false;
+    inventory->opening = true;
+    inventory->renderable.elapsedTimeMS = 0;
     jadel::message("Inventory closed\n");
 }
 
@@ -15,7 +33,7 @@ void printInventory(const Inventory *inventory)
     bool inventoryEmpty = true;
     for (int i = 0; i < 10; ++i)
     {
-        if (currentGame->player.inventory.itemSlots[i].hasItem)
+        if (inventory->itemSlots[i].hasItem)
         {
             inventoryEmpty = false;
             jadel::message("%d: %s\n", j++, inventory->itemSlots[i].item->gameObject.entity.name);
@@ -38,12 +56,12 @@ ItemSlot *askInventorySlot(Inventory *inventory)
         {
             for (int itemIndex = 0; itemIndex < 10; ++itemIndex)
             {
-                if (currentGame->player.inventory.itemSlots[itemIndex].hasItem)
+                if (inventory->itemSlots[itemIndex].hasItem)
                 {
                     ++j;
                     if (j == i)
                     {
-                        slot = &currentGame->player.inventory.itemSlots[itemIndex];
+                        slot = &inventory->itemSlots[itemIndex];
                         break;
                     }
                 }
@@ -53,8 +71,119 @@ ItemSlot *askInventorySlot(Inventory *inventory)
     return slot;
 }
 
-void updateSubstateInventory()
+static bool cursorInRect(jadel::Vec2 mousePos, jadel::Vec2 start, jadel::Vec2 end)
 {
+    float xStart = start.x < end.x ? start.x : end.x;
+    float yStart = start.y < end.y ? start.y : end.y;
+    float xEnd = start.x < end.x ? end.x : start.x;
+    float yEnd = start.y < end.y ? end.y : start.y;
+    bool result = mousePos.x >= xStart && mousePos.x < xEnd && mousePos.y >= yStart && mousePos.y < yEnd;
+    return result;
+}
+
+jadel::Rectf getPosOfItem(int index, Inventory *inventory)
+{
+    jadel::Rectf result;
+
+    // TODO: Clean up magic numbers
+    jadel::Vec2 start = inventory->renderable.screenObject.pos + jadel::Vec2(0.2f, inventory->renderable.mainDimensions.y + SpriteSize * (-index * 1.2f) - 0.2f);
+
+    jadel::Vec2 end = start + jadel::Vec2(SpriteSize, -SpriteSize);
+    result = {start.x, start.y, end.x, end.y};
+    return result;
+}
+
+void useItemInSlot(ItemSlot *slot)
+{
+    Item *item = slot->item;
+    useItem(item, &currentGame->player);
+    if (item->flags & ITEM_EFFECT_CONSUMABLE)
+        slot->hasItem = false;
+}
+
+void dropItemInSlot(ItemSlot *slot)
+{
+    slot->hasItem = false;
+    if (slot->item->gameObject.entity.id == getPlayerWeaponID())
+    {
+        currentGame->player.equippedWeapon = NULL;
+    }
+    Sector *currentSector = getSectorOfActor(&currentGame->player);
+    addSectorItem(currentSector, slot->item);
+    jadel::message("Dropped %s\n", slot->item->gameObject.entity.name);
+    printInventory(&currentGame->player.inventory);
+}
+
+void updateSubstateInventory(Inventory *inventory)
+{
+    InventoryRenderable *inRenderable = &inventory->renderable;
+    jadel::Vec2 inPos = inRenderable->screenObject.pos;
+    jadel::Vec2 headerStart = inPos + inRenderable->screenObject.screenRects[0].pos;
+    jadel::Vec2 headerEnd = headerStart + inRenderable->screenObject.screenRects[0].dimensions;
+
+    jadel::Vec2 mouseScreenPos = jadel::inputGetMouseRelative();
+    jadel::Color *headerColor = &inRenderable->headerColor;
+    // TODO: multiply by matrix
+    mouseScreenPos.x *= 16.0f;
+    mouseScreenPos.y *= 9.0f;
+    static jadel::Vec2 hookPosition;
+    if (cursorInRect(mouseScreenPos, headerStart, headerEnd))
+    {
+        *headerColor = hoverHeaderColor;
+        if (!inRenderable->hooked && jadel::inputLButtonDown)
+        {
+            inRenderable->hooked = true;
+            hookPosition = mouseScreenPos - inPos;
+        }
+    }
+    else
+        *headerColor = idleHeaderColor;
+    if (inRenderable->hooked)
+    {
+        *headerColor = hookedHeaderColor;
+        inPos = mouseScreenPos - hookPosition;
+    }
+
+    if (!jadel::inputLButtonDown)
+        inRenderable->hooked = false;
+
+    setInventoryPos(inPos, inRenderable);
+
+    int foundItems = 0;
+    static bool canClickItem;
+    if (!jadel::inputLButtonDown)
+    {
+        canClickItem = true;
+    }
+    for (int i = 0; i < 10; ++i)
+    {
+        ItemSlot *slot = &inventory->itemSlots[i];
+        if (slot->hasItem)
+        {
+            jadel::Rectf itemPos = getPosOfItem(foundItems, inventory);
+            if (cursorInRect(mouseScreenPos, jadel::Vec2(itemPos.x1, itemPos.y1), jadel::Vec2(itemPos.x0, itemPos.y0)))
+            {
+                // jadel::message("Hovering over item %d\n", foundItems);
+                slot->hovered = true;
+                if (canClickItem && jadel::inputLButtonDown)
+                {
+                    useItemInSlot(slot);
+                    canClickItem = false;
+                }
+                else if (jadel::inputRButtonDown)
+                {
+                    dropItemInSlot(slot);
+                }
+            }
+            else
+            {
+                slot->hovered = false;
+            }
+            foundItems++;
+        }
+    }
+
+    renderInventory(inventory);
     if (jadel::inputIsKeyTyped(jadel::KEY_I))
     {
         closeInventory(&currentGame->player.inventory);
@@ -81,10 +210,7 @@ void updateSubstateInventory()
         ItemSlot *slot = askInventorySlot(&currentGame->player.inventory);
         if (slot)
         {
-            Item *item = slot->item;
-            useItem(item, &currentGame->player);
-            if (item->flags & ITEM_EFFECT_CONSUMABLE)
-                slot->hasItem = false;
+            useItemInSlot(slot);
             printInventory(&currentGame->player.inventory);
         }
     }
@@ -94,11 +220,113 @@ void updateSubstateInventory()
         if (slot)
         {
             currentGame->player.inventory.dropMode = false;
-            slot->hasItem = false;
-            Sector *currentSector = getSectorOfActor(&currentGame->player);
-            addSectorItem(currentSector, slot->item);
-            jadel::message("Dropped %s\n", slot->item->gameObject.entity.name);
-            printInventory(&currentGame->player.inventory);
+            dropItemInSlot(slot);
         }
     }
+}
+
+bool initInventory(Inventory *in)
+{
+    if (!in)
+        return false;
+    for (int i = 0; i < 10; ++i)
+    {
+        in->itemSlots[i] = {0};
+    }
+    in->useMode = false;
+    in->dropMode = false;
+    in->renderable = createInventoryRenderable(jadel::Vec2(-15.0f, -8.0f), jadel::Vec2(15.0f, 16.0f));
+    return true;
+}
+
+void setInventoryPos(jadel::Vec2 pos, InventoryRenderable *renderable)
+{
+    renderable->screenObject.pos = pos;
+    renderable->inventoryCenter = pos + renderable->inventoryRadius;
+}
+
+InventoryRenderable createInventoryRenderable(jadel::Vec2 pos, jadel::Vec2 dimensions)
+{
+    InventoryRenderable renderable;
+    initScreenObject(pos, &renderable.screenObject);
+    renderable.mainDimensions = dimensions;
+    renderable.inventoryRadius = jadel::Vec2(dimensions.x * 0.5f, dimensions.y * 0.5f);
+
+    setInventoryPos(pos, &renderable);
+    renderable.margin = 0.08f;
+
+    renderable.targetOpeningTimeMS = 1000;
+    renderable.elapsedTimeMS = 0;
+    renderable.hooked = false;
+    renderable.inventoryOpened = false;
+    return renderable;
+};
+
+void renderInventory(Inventory *inventory)
+{
+    InventoryRenderable *renderable = &inventory->renderable;
+    ScreenObject *scrObj = &renderable->screenObject;
+    screenObjectClear(scrObj);
+
+    if (inventory->opening)
+    {
+        renderable->inventoryOpened = false;
+        renderable->inventoryOpenTimer.start();
+        inventory->opening = false;
+    }
+
+    if (!renderable->inventoryOpened)
+    {
+        renderable->elapsedTimeMS += renderable->inventoryOpenTimer.getMillisSinceLastUpdate();
+
+        float currentRadiusMod = {(float)renderable->elapsedTimeMS / (float)renderable->targetOpeningTimeMS};
+        if (currentRadiusMod > 1.0f)
+            currentRadiusMod = 1.0f;
+        jadel::Vec2 currentRadius(currentRadiusMod * renderable->inventoryRadius.x, currentRadiusMod * renderable->inventoryRadius.y);
+        jadel::Vec2 openingStart = renderable->inventoryRadius - currentRadius;
+        jadel::Vec2 openingEnd = renderable->inventoryRadius + currentRadius;
+
+        // renderSurface(&inventorySurface, openingStart, openingEnd);
+
+        screenObjectPushScreenSurface(openingStart, openingEnd - openingStart, &inventorySurface, scrObj);
+
+        // pushRenderable(renderable->screenObject, &uiLayer);
+        if (renderable->elapsedTimeMS >= renderable->targetOpeningTimeMS)
+        {
+            renderable->elapsedTimeMS = 0;
+            renderable->inventoryOpened = true;
+        }
+        pushRenderable(*scrObj, &uiLayer);
+        return;
+    }
+    screenObjectPushScreenSurface(jadel::Vec2(0, 0), renderable->mainDimensions, &inventorySurface, scrObj);
+    screenObjectPushRect(jadel::Vec2(0, renderable->mainDimensions.y), jadel::Vec2(renderable->mainDimensions.x, 0.4f), renderable->headerColor, scrObj);
+
+    float itemY = -1.0f;
+    for (int i = 0; i < 10; ++i)
+    {
+        jadel::Vec2 itemDim(SpriteSize, SpriteSize);
+        if (!inventory->itemSlots[i].hasItem)
+            continue;
+        Item *item = inventory->itemSlots[i].item;
+        const jadel::Surface *sprite = NULL;
+        if (item->gameObject.frames.numFrames > 0)
+            sprite = getCurrentFrame(&item->gameObject);
+
+        jadel::Color itemColor;
+        if (item->gameObject.entity.id == getPlayerWeaponID())
+            itemColor = jadel::Color{1.0f, 1.0f, 0.2f, 1.0f};
+        else
+        {
+            if (inventory->itemSlots[i].hovered)
+                itemColor = itemBGHoverColor;
+            else
+                itemColor = itemBGIdleColor;
+        }
+        screenObjectPushRect(jadel::Vec2(0.2f, renderable->mainDimensions.y + SpriteSize * itemY - 0.2f), itemDim, itemColor, scrObj);
+        if (sprite)
+            screenObjectPushScreenSurface(jadel::Vec2(0.2f, renderable->mainDimensions.y + SpriteSize * itemY - 0.2f), itemDim, sprite, scrObj);
+        itemY -= 1.2f;
+    }
+    pushRenderable(*scrObj, &uiLayer);
 }
