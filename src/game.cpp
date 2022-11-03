@@ -215,6 +215,14 @@ bool move(int x, int y, Actor *actor)
 
 void attack(Actor *attacker, Actor *target)
 {
+    const char* weaponName;
+    const char* defaultWeapon = "fists";
+    if (attacker->equippedWeapon)
+    {
+        weaponName = attacker->equippedWeapon->gameObject.entity.name;
+    }
+    else
+        weaponName = defaultWeapon;
     if (!target)
     {
         jadel::message("No target to attack!\n");
@@ -235,10 +243,11 @@ void attack(Actor *attacker, Actor *target)
     gameObject->health -= damage;
     if (gameObject->health < 0)
         gameObject->health = 0;
-    jadel::message("%s dealt %d damage to %s ! %s's hp: %d\n",
+    jadel::message("%s dealt %d damage to %s with their %s ! %s's hp: %d\n",
            attacker->gameObject.entity.name,
            damage,
            target->gameObject.entity.name,
+           weaponName,   
            target->gameObject.entity.name,
            gameObject->health);
     if (gameObject->health <= 0)
@@ -558,10 +567,16 @@ bool initGame(jadel::Window *window)
         return false;
     }
 
-    if (!initRender(window))
+    if (!systemInitRender(window))
     {
         return false;
     }
+
+    if (!systemInitInventory())
+    {
+        return false;
+    }
+
     screenTilemapW = 16;
     screenTilemapH = 9;
     currentGame->tileScreenW = window->width / screenTilemapW;
@@ -605,6 +620,12 @@ bool initGame(jadel::Window *window)
     assets.loadSurface("res/portal.png");
     assets.loadSurface("res/dagger.png");
     
+    const char* fontfile = "res/fonts/arial.fnt";
+    if (!loadFont(fontfile, &currentGame->font))
+    {
+        jadel::message("[ERROR] Could not load font %s\n", fontfile);
+        return false;
+    }
     currentGame->actors = (Actor *)jadel::memoryReserve(MAX_ACTORS * sizeof(Actor));
     currentGame->items = (Item *)jadel::memoryReserve(MAX_GAMEOBJECTS * sizeof(Item));
     currentGame->gameObjects = (GameObject *)jadel::memoryReserve(MAX_GAMEOBJECTS * sizeof(GameObject));
@@ -748,51 +769,41 @@ void executeCommand(uint32 command, Actor *actor)
     case COMMAND_MOVE_LEFT:
     {
         moved = tryToMove(-20, 0, actor);
-        // playerFrames->currentFrameIndex = 1;
-        // currentGame->updateGame = true;
         break;
     }
     case COMMAND_MOVE_RIGHT:
     {
         moved = tryToMove(20, 0, actor);
-        // playerFrames->currentFrameIndex = 0;
-        // currentGame->updateGame = true;
         break;
     }
     case COMMAND_MOVE_UP:
     {
         moved = tryToMove(0, 20, actor);
-        // currentGame->updateGame = true;
         break;
     }
     case COMMAND_MOVE_DOWN:
     {
         moved = tryToMove(0, -20, actor);
-        // currentGame->updateGame = true;
         break;
     }
     case COMMAND_MOVE_UP_LEFT:
     {
         moved = tryToMove(-14, 14, actor);
-        // currentGame->updateGame = true;
         break;
     }
     case COMMAND_MOVE_UP_RIGHT:
     {
         moved = tryToMove(14, 14, actor);
-        // currentGame->updateGame = true;
         break;
     }
     case COMMAND_MOVE_DOWN_RIGHT:
     {
         moved = tryToMove(14, -14, actor);
-        // currentGame->updateGame = true;
         break;
     }
     case COMMAND_MOVE_DOWN_LEFT:
     {
         moved = tryToMove(-14, -14, actor);
-        // currentGame->updateGame = true;
         break;
     }
     }
@@ -832,7 +843,6 @@ uint32 getSectorDir(jadel::Point2i currentPos, const Sector *sector)
 
 void updateSubstateGame()
 {
-
     currentGame->numCommands = 0;
     for (int i = 0; i < gameCommands.numKeyTypeCommands; ++i)
     {
@@ -859,7 +869,6 @@ void updateSubstateGame()
     }
 
     bool playerMoved = false;
-    AnimFrames *playerFrames = &currentGame->player.gameObject.frames;
     for (int i = 0; i < currentGame->numCommands; ++i)
     {
         switch (currentGame->commandQueue[i])
@@ -870,7 +879,8 @@ void updateSubstateGame()
             {
                 if (tryToMove(-20, 0, &currentGame->player))
                     playerMoved = true;
-                playerFrames->currentFrameIndex = 1;
+                setFrame(1, &currentGame->player);
+
                 currentGame->updateGame = true;
             }
             break;
@@ -881,7 +891,7 @@ void updateSubstateGame()
             {
                 if (tryToMove(20, 0, &currentGame->player))
                     playerMoved = true;
-                playerFrames->currentFrameIndex = 0;
+                setFrame(0, &currentGame->player);
                 currentGame->updateGame = true;
             }
             break;
@@ -1053,59 +1063,45 @@ void updateGame()
         updateSubstateGame();
         break;
     case SUBSTATE_INVENTORY:
-        updateSubstateInventory();
+        updateSubstateInventory(&currentGame->player.inventory);
         break;
     default:
         jadel::message("Trying to update nonexistent substate\n");
         break;
     }
-
-    // if (currentGame->updateGame)
-    if (true)
+    currentGame->spriteTimerMillis += currentGame->spriteTimer.getMillisSinceLastUpdate();
+    currentGame->spriteTimer.update();
+    if (currentGame->spriteTimerMillis >= 333)
     {
-        currentGame->spriteTimerMillis += currentGame->spriteTimer.getMillisSinceLastUpdate();
-        currentGame->spriteTimer.update();
-        if (currentGame->spriteTimerMillis >= 333)
+        currentGame->spriteTimerMillis %= 333;
+        jadel::Vector<Item *> &items = currentGame->currentWorld->items;
+        for (size_t i = 0; i < items.size; ++i)
         {
-            currentGame->spriteTimerMillis %= 333;
-            jadel::Vector<Item *> &items = currentGame->currentWorld->items;
-            for (size_t i = 0; i < items.size; ++i)
-            {
-                items[i]->gameObject.frames.currentFrameIndex++;
-                if (items[i]->gameObject.frames.currentFrameIndex >= items[i]->gameObject.frames.numFrames)
-                {
-                    items[i]->gameObject.frames.currentFrameIndex = items[i]->gameObject.frames.currentFrameIndex = 0;
-                }
-            }
+            setNextFrame(&items[i]->gameObject);
         }
-        auto actors = getActors();
-        for (int i = 0; i < actors.size; ++i)
-        {
-            Actor *actor = actors[i];
-            if (actor->followingPath && actor->pathStepsTaken < actor->pathLength)
-            {
-                actor->commandInQueue = getSectorDir(actor->gameObject.entity.pos, actor->path[actor->pathLength - 1 - actor->pathStepsTaken]);
-            }
-            if (actor->commandInQueue)
-            {
-                executeCommand(actor->commandInQueue, actor);
-            }
-            if (actor->pathStepsTaken == actor->pathLength)
-            {
-                actor->clearPath();
-            }
-        }
-        /*Actor* actor = getActors()[1];
-        if (actor->followingPath)
-        {
-            calculatePath(getSectorOfActor(actor),
-                          getSectorOfActor(&currentGame->player), actor);
-        }*/
-        currentGame->screenPos =
-            {.x = currentGame->player.gameObject.entity.pos.x - screenTilemapW / 2,
-             .y = currentGame->player.gameObject.entity.pos.y - screenTilemapH / 2};
-        currentGame->updateGame = false;
-
-        render();
     }
-}
+    auto actors = getActors();
+    for (int i = 0; i < actors.size; ++i)
+    {
+        Actor *actor = actors[i];
+        if (actor->followingPath && actor->pathStepsTaken < actor->pathLength)
+        {
+            actor->commandInQueue = getSectorDir(actor->gameObject.entity.pos, actor->path[actor->pathLength - 1 - actor->pathStepsTaken]);
+        }
+        if (actor->commandInQueue)
+        {
+            executeCommand(actor->commandInQueue, actor);
+        }
+        if (actor->pathStepsTaken == actor->pathLength)
+        {
+            actor->clearPath();
+        }
+    }
+    currentGame->screenPos =
+    {
+        .x = currentGame->player.gameObject.entity.pos.x - screenTilemapW / 2,
+         .y = currentGame->player.gameObject.entity.pos.y - screenTilemapH / 2};
+    currentGame->updateGame = false;
+    //pushRenderable(&currentGame->font.fontAtlas, jadel::Vec2(-2.0f, -2.0f), jadel::Vec2(8,4), &gameLayer);
+    render();
+}    

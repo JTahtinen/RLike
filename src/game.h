@@ -6,6 +6,7 @@
 #include "world.h"
 #include "actor.h"
 #include "timer.h"
+#include "font.h"
 #include <string>
 #include <vector>
 
@@ -106,6 +107,7 @@ struct Game
     size_t spriteTimerMillis;
     bool updateGame = true;
 
+    Font font;
     AssetCollection assets;  
 };
 

@@ -1,7 +1,11 @@
 #include "render.h"
+#include "game.h"
 #include <jadel.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+#include <stack>
+#include <vector>
+#include "screenobject.h"
 
 RenderLayer gameLayer;
 RenderLayer uiLayer;
@@ -17,87 +21,105 @@ static int yEnd;
 static jadel::Recti worldScreenEndDim;
 static jadel::Recti worldScreenDim;
 
+static std::stack<jadel::Mat3> transformationStack;
+
+static jadel::Mat3 identityMatrix(1.0f, 0, 0,
+                                  0, 1.0f, 0,
+                                  0, 0, 1.0f); 
+
 static jadel::Mat3 viewMatrix(1.0f / 16.0f, 0.0f, 0.0f,
                               0.0f, 1.0f / 9.0f, 0.0f,
                               0.0f, 0.0f, 1.0f);
 
-static jadel::Surface inventorySurface;
 
-static jadel::Color idleHeaderColor = {0.6f, 0.2f, 0.3f, 0.8f};
-static jadel::Color hoverHeaderColor = {0.6f, 0.3f, 0.4f, 1.0f};
-static jadel::Color hookedHeaderColor = {0.6f, 0.8f, 0.6f, 1.0f};
-
-struct InventoryRenderable
+static void pushMatrix(jadel::Mat3 matrix)
 {
-    float margin;
-    jadel::Vec2 dimensions;
-    jadel::Vec2 inventoryStart;
-    jadel::Vec2 inventoryEnd;
-    jadel::Vec2 innerStart;
-    jadel::Vec2 innerEnd;
-    jadel::Vec2 inventoryRadius;
-    jadel::Vec2 inventoryCenter;
-    jadel::Vec2 headerStart;
-    jadel::Vec2 headerEnd;
-    jadel::Color headerColor;
-    uint32 targetOpeningTimeMS;
-    uint32 elapsedTimeMS;
-    Timer inventoryOpenTimer;
-    bool inventoryOpened;
-};
-
-static InventoryRenderable inRenderable;
-
-void setInventoryPos(jadel::Vec2 pos, InventoryRenderable *renderable)
-{
-    renderable->inventoryStart = pos;
-    renderable->inventoryEnd = pos + renderable->dimensions;
-    renderable->innerStart = jadel::Vec2(pos.x + 0.2f, pos.y - 0.2f);
-    renderable->innerEnd = jadel::Vec2(renderable->inventoryEnd.x - 0.2f, renderable->inventoryEnd.y - 0.2f);
-    renderable->inventoryCenter = pos + renderable->inventoryRadius;
-    renderable->headerStart = jadel::Vec2(renderable->inventoryStart.x, renderable->inventoryEnd.y);
-    renderable->headerEnd = jadel::Vec2(renderable->inventoryEnd.x, renderable->inventoryEnd.y + 0.5f);    
+    jadel::Mat3 multipliedMatrix = matrix.mul(transformationStack.top());
+    transformationStack.emplace(multipliedMatrix);
 }
 
-InventoryRenderable createInventoryRenderable(jadel::Vec2 pos, jadel::Vec2 dimensions)
+static bool popMatrix()
 {
-    InventoryRenderable renderable;
-    renderable.dimensions = dimensions;
-    renderable.inventoryRadius = jadel::Vec2(dimensions.x * 0.5f, dimensions.y * 0.5f);
-    setInventoryPos(pos, &renderable);
-    renderable.margin = 0.08f;
-
-    renderable.targetOpeningTimeMS = 1000;
-    renderable.elapsedTimeMS = 0;
-    renderable.inventoryOpened = false;
-    renderable.headerColor = idleHeaderColor;
-    return renderable;
-}
-
-void pushRenderable(const jadel::Surface *renderable, RenderLayer *layer)
-{
-    layer->surfaces.push(renderable);
-}
-
-void pushRenderable(RectfRenderable renderable, RenderLayer *layer)
-{
-    layer->rects.push(renderable);
+    if (transformationStack.size() <= 1) return false;
+    transformationStack.pop();
+    return true;
 }
 
 void renderSurface(const jadel::Surface *surface, jadel::Vec2 start, jadel::Vec2 end)
 {
-    jadel::Vec2 screenStart = viewMatrix.mul(start);
-    jadel::Vec2 screenEnd = viewMatrix.mul(end);
+    jadel::Mat3 matrix = transformationStack.top();
+    jadel::Vec2 screenStart = matrix.mul(start);
+    jadel::Vec2 screenEnd = matrix.mul(end);
     jadel::graphicsBlitRelative(surface, jadel::Rectf{screenStart.x, screenStart.y, screenEnd.x, screenEnd.y});
 }
 
 void renderRect(float a, float r, float g, float b, jadel::Vec2 start, jadel::Vec2 end)
 {
-    jadel::Vec2 screenStart = viewMatrix.mul(start);
-    jadel::Vec2 screenEnd = viewMatrix.mul(end);
+    jadel::Mat3 matrix = transformationStack.top();
+    jadel::Vec2 screenStart = matrix.mul(start);
+    jadel::Vec2 screenEnd = matrix.mul(end);
     jadel::graphicsDrawRectRelative(jadel::Rectf{screenStart.x, screenStart.y, screenEnd.x, screenEnd.y},
                                     jadel::Color{a, r, g, b});
 }
+
+void renderRect(jadel::Color color, jadel::Vec2 start, jadel::Vec2 end)
+{
+    renderRect(color.a, color.r, color.g, color.b, start, end);
+}
+
+void pushRenderable(ScreenObject scrObj, RenderLayer* layer)
+{
+    layer->screenObjects.emplace_back(scrObj);
+}
+
+void pushRenderable(const jadel::Surface* surface, jadel::Vec2 pos, jadel::Vec2 dimensions, RenderLayer* layer)
+{
+    ScreenObject scrObj;
+    initScreenObject(pos, &scrObj);
+    ScreenSurface scrSurf = createScreenSurface(jadel::Vec2(0, 0), dimensions, surface);
+    screenObjectPushScreenSurface(scrSurf, &scrObj);
+    pushRenderable(scrObj, layer);
+}
+
+void pushRenderable(const jadel::Color color, jadel::Vec2 pos, jadel::Vec2 dimensions, RenderLayer* layer)
+{
+    ScreenObject scrObj;
+    initScreenObject(pos, &scrObj);
+    ScreenRect scrRect = createScreenRect(jadel::Vec2(0, 0), dimensions, color);
+    screenObjectPushRect(scrRect, &scrObj);
+    pushRenderable(scrObj, layer);
+}
+
+void flushLayer(RenderLayer* layer)
+{
+    pushMatrix(viewMatrix);
+    uint32 surfacesRendered = 0;
+    uint32 rectsRendered = 0;
+    for (ScreenObject& scrObj : layer->screenObjects)
+    {
+        for (uint32 type : scrObj.typeQueue)
+        {
+            switch (type)
+            {
+                case RENDERABLE_TYPE_SURFACE:
+                {
+                    ScreenSurface scrSurf = scrObj.screenSurfaces[surfacesRendered++];
+                    renderSurface(scrSurf.surface, scrObj.pos + scrSurf.pos, scrObj.pos + scrSurf.pos + scrSurf.dimensions);
+                }
+                break;
+                case RENDERABLE_TYPE_RECT:
+                {
+                    ScreenRect scrRect = scrObj.screenRects[rectsRendered++];
+                    renderRect(scrRect.color, scrObj.pos + scrRect.pos, scrObj.pos + scrRect.pos + scrRect.dimensions);
+                }
+                break;
+            }
+        }
+    }
+    layer->screenObjects.clear();
+    popMatrix();
+}
+
 
 bool load_PNG(const char *filename, jadel::Surface *target)
 {
@@ -117,24 +139,21 @@ bool load_PNG(const char *filename, jadel::Surface *target)
     return true;
 }
 
-bool initRender(jadel::Window *window)
+bool systemInitRender(jadel::Window *window)
 {
     stbi_set_flip_vertically_on_load(true);
     if (!jadel::graphicsCreateSurface(window->width, window->height, &workingBuffer))
         return false;
     if (!jadel::graphicsCreateSurface(256, 256, &workingTileSurface))
         return false;
-    jadel::vectorInit<const jadel::Surface *>(50, &gameLayer.surfaces);
-    jadel::vectorInit<RectfRenderable>(50, &gameLayer.rects);
-    jadel::vectorInit<const jadel::Surface *>(50, &uiLayer.surfaces);
-    jadel::vectorInit<RectfRenderable>(50, &uiLayer.rects);
+    
+    transformationStack.emplace(identityMatrix);
+
+    gameLayer.screenObjects.reserve(50);
     jadel::graphicsPushTargetSurface(&workingBuffer);
     jadel::graphicsSetClearColor(0);
     jadel::graphicsClearTargetSurface();
     jadel::graphicsPopTargetSurface();
-    load_PNG("res/inventory3.png", &inventorySurface);
-
-    inRenderable = createInventoryRenderable(jadel::Vec2(-15.0f, -8.0f), jadel::Vec2(15.0f, 16.0f));
 
     return true;
 }
@@ -149,68 +168,20 @@ static jadel::Recti getSectorDimensions(int x, int y)
     return result;
 }
 
-static void renderInventory(InventoryRenderable *renderable)
+void renderScreenObject(const ScreenObject* scrObj)
 {
-    Inventory *inventory = &currentGame->player.inventory;
-
-    if (inventory->opening)
+    for (ScreenRect scrRect: scrObj->screenRects)
     {
-        renderable->inventoryOpened = false;
-        renderable->inventoryOpenTimer.start();
-        inventory->opening = false;
+        renderRect(scrRect.color, scrObj->pos + scrRect.pos, scrObj->pos + scrRect.pos + scrRect.dimensions);        
     }
 
-    if (!renderable->inventoryOpened)
+    for (ScreenSurface scrSurface: scrObj->screenSurfaces)
     {
-        renderable->elapsedTimeMS += renderable->inventoryOpenTimer.getMillisSinceLastUpdate();
-
-        float currentRadiusMod = {(float)renderable->elapsedTimeMS / (float)renderable->targetOpeningTimeMS};
-        if (currentRadiusMod > 1.0f)
-            currentRadiusMod = 1.0f;
-        jadel::Vec2 currentRadius(currentRadiusMod * renderable->inventoryRadius.x, currentRadiusMod * renderable->inventoryRadius.y);
-        jadel::Vec2 openingStart = renderable->inventoryCenter - currentRadius;
-        jadel::Vec2 openingEnd = renderable->inventoryCenter + currentRadius;
-
-        renderSurface(&inventorySurface, openingStart, openingEnd);
-
-        if (renderable->elapsedTimeMS >= renderable->targetOpeningTimeMS)
-        {
-            renderable->elapsedTimeMS = 0;
-            renderable->inventoryOpened = true;
-        }
-
-        return;
-    }
-
-    static const float SpriteSize = 1.5f;
-    renderSurface(&inventorySurface, renderable->inventoryStart, renderable->inventoryEnd);
-    renderRect(renderable->headerColor.a, renderable->headerColor.r, renderable->headerColor.g, renderable->headerColor.b, renderable->headerStart, renderable->headerEnd);
-    float itemY = -1.0f;
-    for (int i = 0; i < 10; ++i)
-    {
-        jadel::Vec2 itemPos(renderable->innerStart.x + 0.2f, renderable->innerEnd.y + SpriteSize * itemY - 0.2f); // - SpriteSize * itemY));
-        jadel::Vec2 itemWH(SpriteSize, SpriteSize);
-        jadel::Rectf itemDim = {itemPos.x, itemPos.y,
-                                itemPos.x + itemWH.x, itemPos.y + itemWH.y};
-        if (!inventory->itemSlots[i].hasItem)
-            continue;
-        Item *item = inventory->itemSlots[i].item;
-        const jadel::Surface *sprite = NULL;
-        if (item->gameObject.frames.numFrames > 0)
-            sprite = item->gameObject.frames.sprites[item->gameObject.frames.currentFrameIndex];
-
-        jadel::Color itemColor;
-        if (item->gameObject.entity.id == getPlayerWeaponID())
-            itemColor = jadel::Color{1.0f, 1.0f, 0.2f, 1.0f};
-        else
-            itemColor = jadel::Color{1.0f, 0.45f, 0.4f, 1.0f};
-        
-        renderRect(itemColor.a, itemColor.r, itemColor.g, itemColor.b, itemPos, itemPos + itemWH);
-        if (sprite)
-            renderSurface(sprite, itemPos, itemPos + itemWH);
-        itemY -= 1.2f;
+        renderSurface(scrSurface.surface, scrObj->pos + scrSurface.pos, scrObj->pos + scrSurface.pos + scrSurface.dimensions);
     }
 }
+
+
 
 static void renderBars()
 {
@@ -269,20 +240,15 @@ static void renderTiles()
             }*/
             if (currentSector.occupant)
             {
-                AnimFrames *frames = &currentSector.occupant->gameObject.frames;
-                if (frames->numFrames > 0)
-                    spriteToDraw = frames->sprites[frames->currentFrameIndex];
+                spriteToDraw = getCurrentFrame(currentSector.occupant);
             }
             else if (currentSector.numItems == 1)
             {
-                AnimFrames *frames = &currentSector.items[currentSector.numItems - 1]->gameObject.frames;
-                if (frames->numFrames > 0)
-                    spriteToDraw = frames->sprites[frames->currentFrameIndex];
+                spriteToDraw = getCurrentFrame(&currentSector.items[currentSector.numItems - 1]->gameObject);
             }
             else if (currentSector.numItems > 1)
             {
-                spriteToDraw = currentGame->assets.getSurface("res/clutter.png");
-                ;
+                spriteToDraw = currentGame->assets.getSurface("res/clutter.png");                ;
             }
             if (spriteToDraw)
             {
@@ -326,6 +292,8 @@ void render()
     jadel::graphicsPushTargetSurface(&workingBuffer);
     jadel::graphicsSetClearColor(0);
     jadel::graphicsClearTargetSurface();
+
+    
     if (currentGame->screenPos.x > -screenTilemapW && currentGame->screenPos.y > -screenTilemapH && currentGame->screenPos.x < currentGame->currentWorld->width && currentGame->screenPos.y < currentGame->currentWorld->height)
     {
         xStart = currentGame->screenPos.x < 0 ? 0 : currentGame->screenPos.x;
@@ -366,45 +334,11 @@ void render()
 
             jadel::graphicsBlitRelative(currentGame->player.equippedWeapon->gameObject.frames.sprites[0],
                                         {wScreenStart.x, wScreenStart.y, wScreenEnd.x, wScreenEnd.y});
-        }
-        if (currentGame->currentState == SUBSTATE_INVENTORY)
-        {
-            static bool hooked = false;
-            jadel::Vec2 inPos = inRenderable.inventoryStart;
-            jadel::Vec2 headerStart = inRenderable.headerStart;
-            jadel::Vec2 headerEnd = inRenderable.headerEnd;
-
-            jadel::Vec2 mouseScreenPos = jadel::inputGetMouseRelative();
-
-            // TODO: multiply by matrix
-            mouseScreenPos.x *= 16.0f;
-            mouseScreenPos.y *= 9.0f;
-            static jadel::Vec2 hookPosition;
-            if (mouseScreenPos.x >= headerStart.x && mouseScreenPos.x < headerEnd.x && mouseScreenPos.y >= headerStart.y && mouseScreenPos.y < headerEnd.y)
-            {
-                inRenderable.headerColor = hoverHeaderColor;
-                if (!hooked && jadel::inputLButtonDown)
-                {
-                    hooked = true;
-                    jadel::message("Hooked\n");
-                    hookPosition = mouseScreenPos - inPos;
-                }
-            }
-            else inRenderable.headerColor = idleHeaderColor;
-            if (hooked)
-            {
-                inRenderable.headerColor = hookedHeaderColor;
-                inPos = mouseScreenPos - hookPosition;
-            }
-
-            if (!jadel::inputLButtonDown)
-                hooked = false;
-
-            setInventoryPos(inPos, &inRenderable);
-            renderInventory(&inRenderable);
-        }
+        }       
     }
-
+    flushLayer(&gameLayer);
+    flushLayer(&uiLayer);
+    
     jadel::graphicsPopTargetSurface();
 }
 
