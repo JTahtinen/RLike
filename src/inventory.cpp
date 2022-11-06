@@ -150,10 +150,15 @@ void updateSubstateInventory(Inventory *inventory)
     setInventoryPos(inPos, inRenderable);
 
     int foundItems = 0;
-    static bool canClickItem;
+    static bool canLeftClickItem = true;
     if (!jadel::inputLButtonDown)
     {
-        canClickItem = true;
+        canLeftClickItem = true;
+    }
+    static bool canRightClickItem = true;
+    if (!jadel::inputRButtonDown)
+    {
+        canRightClickItem = true;
     }
     for (int i = 0; i < 10; ++i)
     {
@@ -165,14 +170,15 @@ void updateSubstateInventory(Inventory *inventory)
             {
                 // jadel::message("Hovering over item %d\n", foundItems);
                 slot->hovered = true;
-                if (canClickItem && jadel::inputLButtonDown)
+                if (canLeftClickItem && jadel::inputLButtonDown)
                 {
                     useItemInSlot(slot);
-                    canClickItem = false;
+                    canLeftClickItem = false;
                 }
-                else if (jadel::inputRButtonDown)
+                else if (canRightClickItem && jadel::inputRButtonDown)
                 {
                     dropItemInSlot(slot);
+                    canRightClickItem = false;
                 }
             }
             else
@@ -296,12 +302,14 @@ void renderInventory(Inventory *inventory)
             renderable->elapsedTimeMS = 0;
             renderable->inventoryOpened = true;
         }
-        pushRenderable(*scrObj, &uiLayer);
+        submitRenderable(scrObj, &uiLayer);
         return;
     }
     screenObjectPushScreenSurface(jadel::Vec2(0, 0), renderable->mainDimensions, &inventorySurface, scrObj);
     screenObjectPushRect(jadel::Vec2(0, renderable->mainDimensions.y), jadel::Vec2(renderable->mainDimensions.x, 0.4f), renderable->headerColor, scrObj);
-
+    
+    static jadel::Vec2 headerTextSize = getTextScreenSize("INVENTORY", 2.5f, &currentGame->font);
+    renderText("INVENTORY", jadel::Vec2((renderable->mainDimensions.x * 0.5f) - (headerTextSize.x * 0.5f), renderable->mainDimensions.y + 0.03f), 2.5f, &currentGame->font, scrObj);
     float itemY = -1.0f;
     for (int i = 0; i < 10; ++i)
     {
@@ -323,10 +331,14 @@ void renderInventory(Inventory *inventory)
             else
                 itemColor = itemBGIdleColor;
         }
-        screenObjectPushRect(jadel::Vec2(0.2f, renderable->mainDimensions.y + SpriteSize * itemY - 0.2f), itemDim, itemColor, scrObj);
+        jadel::Vec2 itemPos(0.2f, renderable->mainDimensions.y + SpriteSize * itemY - 0.2f);
+        screenObjectPushRect(itemPos, itemDim, itemColor, scrObj);
         if (sprite)
-            screenObjectPushScreenSurface(jadel::Vec2(0.2f, renderable->mainDimensions.y + SpriteSize * itemY - 0.2f), itemDim, sprite, scrObj);
+            screenObjectPushScreenSurface(itemPos, itemDim, sprite, scrObj);
+
+        renderText(item->gameObject.entity.name, itemPos + jadel::Vec2(SpriteSize + 0.4f, SpriteSize * 0.5f - 0.1f), 4, &currentGame->font, scrObj);
         itemY -= 1.2f;
     }
-    pushRenderable(*scrObj, &uiLayer);
+    submitRenderable(scrObj, &uiLayer);
+
 }
