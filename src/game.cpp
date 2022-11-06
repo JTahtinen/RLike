@@ -22,7 +22,7 @@ float frameTime = 0;
 
 void resetPathNodes(World *world);
 
-jadel::Surface *AssetCollection::getSurface(const char* name)
+jadel::Surface *AssetCollection::getSurface(const char *name)
 {
     for (size_t i = 0; i < names.size(); ++i)
     {
@@ -34,7 +34,7 @@ jadel::Surface *AssetCollection::getSurface(const char* name)
     return getSurface("res/missing.png");
 }
 
-void AssetCollection::pushSurface(jadel::Surface surface, const char* name)
+void AssetCollection::pushSurface(jadel::Surface surface, const char *name)
 {
     this->surfaces.emplace_back(surface);
     this->names.emplace_back(std::string(name));
@@ -215,8 +215,8 @@ bool move(int x, int y, Actor *actor)
 
 void attack(Actor *attacker, Actor *target)
 {
-    const char* weaponName;
-    const char* defaultWeapon = "fists";
+    const char *weaponName;
+    const char *defaultWeapon = "fists";
     if (attacker->equippedWeapon)
     {
         weaponName = attacker->equippedWeapon->gameObject.entity.name;
@@ -244,12 +244,12 @@ void attack(Actor *attacker, Actor *target)
     if (gameObject->health < 0)
         gameObject->health = 0;
     jadel::message("%s dealt %d damage to %s with their %s ! %s's hp: %d\n",
-           attacker->gameObject.entity.name,
-           damage,
-           target->gameObject.entity.name,
-           weaponName,   
-           target->gameObject.entity.name,
-           gameObject->health);
+                   attacker->gameObject.entity.name,
+                   damage,
+                   target->gameObject.entity.name,
+                   weaponName,
+                   target->gameObject.entity.name,
+                   gameObject->health);
     if (gameObject->health <= 0)
     {
         gameObject->alive = false;
@@ -603,8 +603,8 @@ bool initGame(jadel::Window *window)
     currentGame->worlds = (World *)jadel::memoryReserve(2 * sizeof(World));
     currentGame->numWorlds = 2;
     AssetCollection &assets = currentGame->assets;
-    //jadel::vectorInit(50, &assets.surfaces);
-    //jadel::vectorInit(50, &assets.names);
+    // jadel::vectorInit(50, &assets.surfaces);
+    // jadel::vectorInit(50, &assets.names);
     assets.loadSurface("res/missing.png");
     assets.loadSurface("res/dude1.png");
     assets.loadSurface("res/dude1l.png");
@@ -619,8 +619,8 @@ bool initGame(jadel::Window *window)
     assets.loadSurface("res/hpotion3.png");
     assets.loadSurface("res/portal.png");
     assets.loadSurface("res/dagger.png");
-    
-    const char* fontfile = "res/fonts/arial.fnt";
+
+    const char *fontfile = "res/fonts/arial.fnt";
     if (!loadFont(fontfile, &currentGame->font))
     {
         jadel::message("[ERROR] Could not load font %s\n", fontfile);
@@ -670,12 +670,12 @@ bool initGame(jadel::Window *window)
     currentGame->worlds[0].actors[0]->gameObject.entity.pos = {3, 2};
     pushActor(2, 1, playerFrames, "Teuvo", &currentGame->worlds[1]);
     pushActor(4, 3, playerFrames, "Jouko", &currentGame->worlds[0]);
-    pushItem(createHealthItem(6, 5, healthPackFrames, "health pack", 20), &currentGame->worlds[1]);
-    pushItem(createHealthItem(8, 6, poisonFrames, "poison", -10), &currentGame->worlds[0]);
-    pushItem(createHealthItem(9, 4, healthPackFrames, "health pack", 20), &currentGame->worlds[0]);
-    pushItem(createHealthItem(10, 4, healthPackFrames, "health pack", 20), &currentGame->worlds[0]);
-    pushItem(createHealthItem(9, 5, healthPackFrames, "health pack", 20), &currentGame->worlds[0]);
-    pushItem(createHealthItem(9, 4, poisonFrames, "poison", -10), &currentGame->worlds[0]);
+    pushItem(createHealthItem(6, 5, healthPackFrames, "Health potion", 20), &currentGame->worlds[1]);
+    pushItem(createHealthItem(8, 6, poisonFrames, "Poison", -10), &currentGame->worlds[0]);
+    pushItem(createHealthItem(9, 4, healthPackFrames, "Health potion", 20), &currentGame->worlds[0]);
+    pushItem(createHealthItem(10, 4, healthPackFrames, "Health potion", 20), &currentGame->worlds[0]);
+    pushItem(createHealthItem(9, 5, healthPackFrames, "Health potion", 20), &currentGame->worlds[0]);
+    pushItem(createHealthItem(9, 4, poisonFrames, "Poison", -10), &currentGame->worlds[0]);
     pushItem(createIlluminatorItem(6, 5, {0}, "Light", 150.0f), &currentGame->worlds[0]);
     pushItem(createIlluminatorItem(18, 3, {0}, "Light", 150.0f), &currentGame->worlds[0]);
     pushItem(createIlluminatorItem(3, 3, {0}, "Light", 150.0f), &currentGame->worlds[1]);
@@ -1047,7 +1047,7 @@ void updateGame()
     {
         exit(0);
     }
-    //jadel::message("%f %f\n", jadel::inputGetMouseXRelative(), jadel::inputGetMouseYRelative());
+    // jadel::message("%f %f\n", jadel::inputGetMouseXRelative(), jadel::inputGetMouseYRelative());
     if (!currentGame->playerCanMove)
     {
         currentGame->moveTimerMillis = currentGame->moveTimer.getMillisSinceLastUpdate();
@@ -1097,11 +1097,26 @@ void updateGame()
             actor->clearPath();
         }
     }
+    /*static jadel::Vec2 textPos(0, 0);
+    static float textSpeed = 0.3f;
+    static float scale = 2.0f;
+    if (jadel::inputIsKeyPressed(jadel::KEY_A)) textPos.x -= textSpeed * scale;
+    if (jadel::inputIsKeyPressed(jadel::KEY_D)) textPos.x += textSpeed * scale;
+    if (jadel::inputIsKeyPressed(jadel::KEY_S)) textPos.y -= textSpeed * scale;
+    if (jadel::inputIsKeyPressed(jadel::KEY_W)) textPos.y += textSpeed * scale;
+
+        if (jadel::inputIsKeyPressed(jadel::KEY_4))
+        scale *= 1.5f;
+    else if (jadel::inputIsKeyPressed(jadel::KEY_3))
+        scale /= 1.5f;
+    renderText("Starting back in the summer of 2010, the estimated time for this run was thought to be roughly 27 minutes. However, after almost four years of painstaking planning, theorycrafting",
+               textPos, scale, &currentGame->font);*/
     currentGame->screenPos =
-    {
-        .x = currentGame->player.gameObject.entity.pos.x - screenTilemapW / 2,
-         .y = currentGame->player.gameObject.entity.pos.y - screenTilemapH / 2};
+        {
+            .x = currentGame->player.gameObject.entity.pos.x - screenTilemapW / 2,
+            .y = currentGame->player.gameObject.entity.pos.y - screenTilemapH / 2};
     currentGame->updateGame = false;
-    //pushRenderable(&currentGame->font.fontAtlas, jadel::Vec2(-2.0f, -2.0f), jadel::Vec2(8,4), &gameLayer);
+    // drawLetter(&currentGame->font);
+    // pushRenderable(&currentGame->font.fontAtlas, jadel::Vec2(-2.0f, -2.0f), jadel::Vec2(8,4), &gameLayer);
     render();
-}    
+}
