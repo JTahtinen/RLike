@@ -3,22 +3,37 @@
 #include <string.h>
 #include "render.h"
 
+struct RawLetter
+{
+    int id;
+    int x;
+    int y;
+    int width;
+    int height;
+    int xOffset;
+    int yOffset;
+    int xAdvance;
+};
+
+
+
 bool loadFont(const char *filepath, Font *font)
 {
     char* data = NULL;
+    char *token = NULL;
     size_t numChars;
-    Letter *letters = NULL;
+    RawLetter *letters = NULL;
 
     if (!font || !jadel::readTextFileAndReserveMemory(filepath, &data, &numChars))
         return false;
     FontInfo *info = &font->info;
     // char *token = strtok(data, "=");
-    char *token = NULL;
     bool startfound = false;
     int fontElementsFound = 0;
     while (fontElementsFound < 5)
     {
         token = strtok_s(data, "=\n ", &data);
+
         if (strcmp(token, "lineHeight") == 0)
         {
             info->lineHeight = atoi(strtok_s(data, "=\n ", &data));
@@ -26,7 +41,7 @@ bool loadFont(const char *filepath, Font *font)
         }
         else if (strcmp(token, "base") == 0)
         {
-            info->base = atoi(strtok_s(data, "=\n ", &data));
+            info->base = atof(strtok_s(data, "=\n ", &data));
             ++fontElementsFound;
         }
         else if (strcmp(token, "scaleW") == 0)
@@ -64,12 +79,12 @@ bool loadFont(const char *filepath, Font *font)
     if (startfound)
     {
         expectedLetterCount = atoi(token);
-        letters = (Letter *)jadel::memoryReserve(sizeof(Letter) * expectedLetterCount);
+        letters = (RawLetter *)jadel::memoryReserve(sizeof(RawLetter) * expectedLetterCount);
         while (numLetters < expectedLetterCount)
         {
             int letterElementsFound = 0;
-            Letter *currentLetter = &letters[numLetters];
-            while (letterElementsFound < 10)
+            RawLetter *currentLetter = &letters[numLetters];
+            while (letterElementsFound < 8)
             {
                 token = strtok_s(data, "=\n ", &data);
                 if (strcmp(token, "id") == 0)
@@ -120,7 +135,7 @@ bool loadFont(const char *filepath, Font *font)
                     currentLetter->xAdvance = atoi(token);
                     ++letterElementsFound;
                 }
-                else if (strcmp(token, "page") == 0)
+  /*              else if (strcmp(token, "page") == 0)
                 {
                     token = strtok_s(data, "=\n ", &data);
                     currentLetter->page = atoi(token);
@@ -131,11 +146,18 @@ bool loadFont(const char *filepath, Font *font)
                     token = strtok_s(data, "=\n ", &data);
                     currentLetter->channel = atoi(token);
                     ++letterElementsFound;
-                }
+                }*/
             }
             ++numLetters;
         }
     }
+    /*for (int i = 0; i < numLetters; ++i)
+    {
+        RawLetter* l = &letters[i];
+        jadel::message("Letter[%d]\nid: %d\nX: %d\nY: %d\nWidth: %d\nHeight: %d\nxOffset: %d\nyOffset: %d\nxAdvance: %d\n\n", 
+        i,l->id,l->x,l->y,l->width,l->height,l->xOffset,l->yOffset,l->xAdvance);
+
+    }*/
     if (expectedLetterCount != numLetters)
     {
         jadel::message("[ERROR] \"%s\" Font load failed\nLetters expected: %d\nLetters parsed: %d\n", expectedLetterCount, numLetters);
@@ -151,6 +173,23 @@ bool loadFont(const char *filepath, Font *font)
     {
         return false;
     }
+    Letter* modifiedLetters = (Letter*)jadel::memoryReserve(sizeof(Letter) * 256);
+    for (int i = 0; i < numLetters; ++i)
+    {
+        RawLetter* rawLetter = &letters[i];
+        Letter* modLetter = &modifiedLetters[rawLetter->id];
+        //Letter* modLetter = &modifiedLetters[i];
+        modLetter->id = rawLetter->id;
+        modLetter->x = (float)rawLetter->x / (float)font->fontAtlas.width;
+        modLetter->y = (float)rawLetter->y / (float)font->fontAtlas.height;
+        modLetter->width = (float)rawLetter->width / (float)font->fontAtlas.width;
+        modLetter->height = (float)rawLetter->height / (float)font->fontAtlas.height;
+        modLetter->xOffset = (float)rawLetter->xOffset / (float)font->fontAtlas.width;
+        modLetter->yOffset = (float)rawLetter->yOffset / (float)font->fontAtlas.height;
+        modLetter->xAdvance = (float)rawLetter->xAdvance / (float)font->fontAtlas.width;
+    }   
+    font->letters = modifiedLetters;
+    font->info.base /= (float)font->fontAtlas.height;   
 
     jadel::memoryFree(data);
     jadel::memoryFree(letters);

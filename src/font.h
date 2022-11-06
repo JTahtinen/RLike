@@ -4,7 +4,7 @@
 struct FontInfo
 {
     int lineHeight;
-    int base;
+    float base;
     int scaleWidth;
     int scaleHeight;
     char file[40];
@@ -12,16 +12,14 @@ struct FontInfo
 
 struct Letter
 {
-    unsigned int id;
-    int x;
-    int y;
-    int width;
-    int height;
-    int xOffset;
-    int yOffset;
-    int xAdvance;
-    int page;
-    int channel;
+    int id;
+    float x;
+    float y;
+    float width;
+    float height;
+    float xOffset;
+    float yOffset;
+    float xAdvance;
 };
 
 struct Font
@@ -33,3 +31,5 @@ struct Font
 };
 
 bool loadFont(const char* filepath, Font* font);
+
+void drawLetter(Letter* letter);
