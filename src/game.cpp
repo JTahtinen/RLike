@@ -219,7 +219,7 @@ void attack(Actor *attacker, Actor *target)
     const char *defaultWeapon = "fists";
     if (attacker->equippedWeapon)
     {
-        weaponName = attacker->equippedWeapon->gameObject.entity.name;
+        weaponName = attacker->equippedWeapon->gameObject.entity.name.c_str();
     }
     else
         weaponName = defaultWeapon;
@@ -231,7 +231,7 @@ void attack(Actor *attacker, Actor *target)
     bool attackHit = rollAttackHit(attacker, target);
     if (!attackHit)
     {
-        jadel::message("%s's attack missed\n", attacker->gameObject.entity.name);
+        jadel::message("%s's attack missed\n", attacker->gameObject.entity.name.c_str());
         return;
     }
     uint32 damage;
@@ -244,16 +244,16 @@ void attack(Actor *attacker, Actor *target)
     if (gameObject->health < 0)
         gameObject->health = 0;
     jadel::message("%s dealt %d damage to %s with their %s ! %s's hp: %d\n",
-                   attacker->gameObject.entity.name,
+                   attacker->gameObject.entity.name.c_str(),
                    damage,
-                   target->gameObject.entity.name,
+                   target->gameObject.entity.name.c_str(),
                    weaponName,
-                   target->gameObject.entity.name,
+                   target->gameObject.entity.name.c_str(),
                    gameObject->health);
     if (gameObject->health <= 0)
     {
         gameObject->alive = false;
-        jadel::message("%s was killed...\n", target->gameObject.entity.name);
+        jadel::message("%s was killed...\n", target->gameObject.entity.name.c_str());
     }
 }
 
@@ -706,6 +706,9 @@ bool initGame(jadel::Window *window)
         }
     }
 
+    jadel::String testString = *getName(&currentGame->player) + *getName(&currentGame->actors[1]); 
+
+    jadel::message("%s\n", testString.c_str());
     setPortal(2, 0, currentGame->worlds[0].entity.id, 3, 4, currentGame->worlds[1].entity.id);
 
     for (int w = 0; w < currentGame->numWorlds; ++w)
@@ -943,7 +946,7 @@ void updateSubstateGame()
                     Item *item = sector->items[sector->numItems - 1];
                     slot->item = item;
                     --sector->numItems;
-                    jadel::message("Picked up %s\n", item->gameObject.entity.name);
+                    jadel::message("Picked up %s\n", item->gameObject.entity.name.c_str());
                     slot->hasItem = true;
                 }
                 else
@@ -969,7 +972,7 @@ void updateSubstateGame()
                 jadel::message("You see:\n");
                 for (int i = 0; i < curSector->numItems; ++i)
                 {
-                    jadel::message("%d: %s\n", i + 1, curSector->items[i]->gameObject.entity.name);
+                    jadel::message("%d: %s\n", i + 1, curSector->items[i]->gameObject.entity.name.c_str());
                 }
             }
             break;
@@ -1097,26 +1100,20 @@ void updateGame()
             actor->clearPath();
         }
     }
-    /*static jadel::Vec2 textPos(0, 0);
-    static float textSpeed = 0.3f;
-    static float scale = 2.0f;
-    if (jadel::inputIsKeyPressed(jadel::KEY_A)) textPos.x -= textSpeed * scale;
-    if (jadel::inputIsKeyPressed(jadel::KEY_D)) textPos.x += textSpeed * scale;
-    if (jadel::inputIsKeyPressed(jadel::KEY_S)) textPos.y -= textSpeed * scale;
-    if (jadel::inputIsKeyPressed(jadel::KEY_W)) textPos.y += textSpeed * scale;
-
-        if (jadel::inputIsKeyPressed(jadel::KEY_4))
-        scale *= 1.5f;
-    else if (jadel::inputIsKeyPressed(jadel::KEY_3))
-        scale /= 1.5f;
-    renderText("Starting back in the summer of 2010, the estimated time for this run was thought to be roughly 27 minutes. However, after almost four years of painstaking planning, theorycrafting",
-               textPos, scale, &currentGame->font);*/
+    static bool viewMemory = false;
+    if (jadel::inputIsKeyTyped(jadel::KEY_Q)) viewMemory = !viewMemory;
+    if (viewMemory)
+    {
+        renderText((jadel::String("Total Memory Allocation: ") + jadel::toString(jadel::memoryGetTotalAllocationSize())).c_str(), jadel::Vec2(-15.5f, 7.0f), 3, &currentGame->font, &uiLayer);
+        renderText((jadel::String("Reserved blocks: ") + jadel::toString(jadel::memoryGetNumAllocatedBlocks())).c_str(), jadel::Vec2(-15.5f, 6.5f), 3, &currentGame->font, &uiLayer);
+        renderText((jadel::String("Reserved bytes: ") + jadel::toString(jadel::memoryGetNumAllocatedBytes())).c_str(), jadel::Vec2(-15.5f, 6.0f), 3, &currentGame->font, &uiLayer);
+        renderText((jadel::String("Available bytes: ") + jadel::toString(jadel::memoryGetFreeBytes())).c_str(), jadel::Vec2(-15.5f, 5.5f), 3, &currentGame->font, &uiLayer);        
+    }
     currentGame->screenPos =
         {
             .x = currentGame->player.gameObject.entity.pos.x - screenTilemapW / 2,
             .y = currentGame->player.gameObject.entity.pos.y - screenTilemapH / 2};
     currentGame->updateGame = false;
-    // drawLetter(&currentGame->font);
-    // pushRenderable(&currentGame->font.fontAtlas, jadel::Vec2(-2.0f, -2.0f), jadel::Vec2(8,4), &gameLayer);
+
     render();
 }
