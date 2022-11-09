@@ -36,7 +36,7 @@ void printInventory(const Inventory *inventory)
         if (inventory->itemSlots[i].hasItem)
         {
             inventoryEmpty = false;
-            jadel::message("%d: %s\n", j++, inventory->itemSlots[i].item->gameObject.entity.name);
+            jadel::message("%d: %s\n", j++, inventory->itemSlots[i].item->gameObject.entity.name.c_str());
         }
     }
     if (inventoryEmpty)
@@ -110,7 +110,7 @@ void dropItemInSlot(ItemSlot *slot)
     }
     Sector *currentSector = getSectorOfActor(&currentGame->player);
     addSectorItem(currentSector, slot->item);
-    jadel::message("Dropped %s\n", slot->item->gameObject.entity.name);
+    jadel::message("Dropped %s\n", slot->item->gameObject.entity.name.c_str());
     printInventory(&currentGame->player.inventory);
 }
 
@@ -311,6 +311,7 @@ void renderInventory(Inventory *inventory)
     static jadel::Vec2 headerTextSize = getTextScreenSize("INVENTORY", 2.5f, &currentGame->font);
     renderText("INVENTORY", jadel::Vec2((renderable->mainDimensions.x * 0.5f) - (headerTextSize.x * 0.5f), renderable->mainDimensions.y + 0.03f), 2.5f, &currentGame->font, scrObj);
     float itemY = -1.0f;
+    int currentItemNumber = 1;
     for (int i = 0; i < 10; ++i)
     {
         jadel::Vec2 itemDim(SpriteSize, SpriteSize);
@@ -336,7 +337,7 @@ void renderInventory(Inventory *inventory)
         if (sprite)
             screenObjectPushScreenSurface(itemPos, itemDim, sprite, scrObj);
 
-        renderText(item->gameObject.entity.name, itemPos + jadel::Vec2(SpriteSize + 0.4f, SpriteSize * 0.5f - 0.1f), 4, &currentGame->font, scrObj);
+        renderText((jadel::toString(currentItemNumber++) + ": " + item->gameObject.entity.name).c_str(), itemPos + jadel::Vec2(SpriteSize + 0.4f, SpriteSize * 0.5f - 0.1f), 4, &currentGame->font, scrObj);
         itemY -= 1.2f;
     }
     submitRenderable(scrObj, &uiLayer);
