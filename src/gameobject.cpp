@@ -9,7 +9,8 @@ GameObject createGameObject(int x, int y, AnimFrames frames, const char *name)
     result.frames.currentFrameIndex = 0;
     result.maxHealth = 100;
     result.health = result.maxHealth;
-    strncpy(result.entity.name, name, sizeof(result.entity.name));
+    jadel::String::init(&result.entity.name, name);
+    //strncpy(result.entity.name, name, sizeof(result.entity.name));
     result.alive = true;
     return result;
 }
@@ -37,4 +38,11 @@ void setNextFrame(GameObject* gameObject)
     {
         frames->currentFrameIndex = 0;
     }
+}
+
+const jadel::String* getName(const GameObject* gameObject)
+{
+    if (!gameObject) return NULL;
+    const jadel::String* result = &gameObject->entity.name;
+    return result;
 }

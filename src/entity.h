@@ -4,7 +4,8 @@
 struct Entity
 {
     uint32 id;
-    char name[20];
+//    char name[20];
+    jadel::String name;
     jadel::Point2i pos;    
 };
 

@@ -59,3 +59,5 @@ void setNextFrame(Actor* actor);
 Actor createActor(int x, int y, AnimFrames frames, const char *name, Attributes *attrib);
 
 Actor createActor(int x, int y, AnimFrames frames, const char *name);
+
+const jadel::String* getName(const Actor* actor);

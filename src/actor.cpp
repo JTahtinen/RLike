@@ -107,3 +107,10 @@ Actor createActor(int x, int y, AnimFrames frames, const char *name)
     Actor result = createActor(x, y, frames, name, &attrib);
     return result;
 }
+
+const jadel::String* getName(const Actor* actor)
+{
+    if (!actor) return NULL;
+    const jadel::String* result = getName(&actor->gameObject);
+    return result;
+}

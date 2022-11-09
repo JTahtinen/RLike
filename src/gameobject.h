@@ -25,3 +25,5 @@ const jadel::Surface* getCurrentFrame(const GameObject* gameObject);
 bool setFrame(int index, GameObject* gameObject);
 
 void setNextFrame(GameObject* gameObject);
+
+const jadel::String* getName(const GameObject* gameObject);
