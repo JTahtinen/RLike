@@ -12,6 +12,7 @@
 #define MAX_RENDERABLES_PER_TYPE (250)
 #define SCREEN_OBJECT_POOL_SIZE (NUM_RENDERABLE_TYPES * MAX_RENDERABLES_PER_TYPE)
 
+#define STRING_POOL_SIZE (200)
 RenderLayer gameLayer;
 RenderLayer uiLayer;
 
@@ -24,7 +25,10 @@ static int xEnd;
 static int yEnd;
 
 
-static ScreenObject screenObjectPool[SCREEN_OBJECT_POOL_SIZE];
+static jadel::String *stringPool;
+static size_t numReservedStrings = 0;
+
+static ScreenObject *screenObjectPool;
 static size_t numReservedScreenObjects = 0; 
 
 static std::stack<jadel::Mat3> transformationStack;
@@ -49,6 +53,13 @@ static bool popMatrix()
         return false;
     transformationStack.pop();
     return true;
+}
+
+jadel::String* reserveString()
+{
+    if (numReservedStrings == STRING_POOL_SIZE) return NULL;
+    jadel::String* result = &stringPool[numReservedStrings++];
+    return result;
 }
 
 ScreenObject* reserveScreenObject()
@@ -180,7 +191,8 @@ bool systemInitRender(jadel::Window *window)
         return false;
 
     transformationStack.emplace(identityMatrix);
-
+    screenObjectPool = (ScreenObject*)jadel::memoryReserve(SCREEN_OBJECT_POOL_SIZE * sizeof(ScreenObject));
+    stringPool = (jadel::String*)jadel::memoryReserve(STRING_POOL_SIZE * sizeof(jadel::String));
     gameLayer.screenObjects.reserve(MAX_RENDERABLES_PER_TYPE);
     uiLayer.screenObjects.reserve(MAX_RENDERABLES_PER_TYPE);
     jadel::graphicsPushTargetSurface(&workingBuffer);
