@@ -706,7 +706,7 @@ bool initGame(jadel::Window *window)
         }
     }
 
-    jadel::String testString = *getName(&currentGame->player) + *getName(&currentGame->actors[1]); 
+    jadel::String testString = *getName(&currentGame->player) + *getName(&currentGame->actors[1]);
 
     jadel::message("%s\n", testString.c_str());
     setPortal(2, 0, currentGame->worlds[0].entity.id, 3, 4, currentGame->worlds[1].entity.id);
@@ -1101,16 +1101,16 @@ void updateGame()
         }
     }
     static bool viewMemory = false;
-    if (jadel::inputIsKeyTyped(jadel::KEY_Q)) viewMemory = !viewMemory;
+    if (jadel::inputIsKeyTyped(jadel::KEY_Q))
+        viewMemory = !viewMemory;
     if (viewMemory)
     {
-        renderText((jadel::String("Total Memory Allocation: ") + jadel::toString(jadel::memoryGetTotalAllocationSize())).c_str(), jadel::Vec2(-15.5f, 7.0f), 3, &currentGame->font, &uiLayer);
-        renderText((jadel::String("Reserved blocks: ") + jadel::toString(jadel::memoryGetNumAllocatedBlocks())).c_str(), jadel::Vec2(-15.5f, 6.5f), 3, &currentGame->font, &uiLayer);
-        renderText((jadel::String("Reserved bytes: ") + jadel::toString(jadel::memoryGetNumAllocatedBytes())).c_str(), jadel::Vec2(-15.5f, 6.0f), 3, &currentGame->font, &uiLayer);
-        renderText((jadel::String("Available bytes: ") + jadel::toString(jadel::memoryGetFreeBytes())).c_str(), jadel::Vec2(-15.5f, 5.5f), 3, &currentGame->font, &uiLayer);        
+        submitText(jadel::Vec2(-15.5f, 7.0f), 3, &currentGame->font, &uiLayer, "Total Memory Allocation in bytes: %d", jadel::memoryGetTotalAllocationSize());
+        submitText(jadel::Vec2(-15.5f, 6.5f), 3, &currentGame->font, &uiLayer, "Reserved blocks: %d", jadel::memoryGetNumAllocatedBlocks());
+        submitText(jadel::Vec2(-15.5f, 6.0f), 3, &currentGame->font, &uiLayer, "Reserved bytes: %d", jadel::memoryGetNumAllocatedBytes());
+        submitText(jadel::Vec2(-15.5f, 5.5f), 3, &currentGame->font, &uiLayer, "Available bytes: %d", jadel::memoryGetFreeBytes());
     }
-    currentGame->screenPos =
-        {
+    currentGame->screenPos ={
             .x = currentGame->player.gameObject.entity.pos.x - screenTilemapW / 2,
             .y = currentGame->player.gameObject.entity.pos.y - screenTilemapH / 2};
     currentGame->updateGame = false;
