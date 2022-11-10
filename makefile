@@ -7,8 +7,13 @@ _DEPS=include
 DEPS=$(patsubst %,$(IDIR)/%,$(_DEPS))
 CFLAGS=/I$(IDIR)
 _OBJ=*.obj
-OBJ=$(patsubst %,$(ODIR)/%,$(_OBJ))
+OBJ=$($(wildcard patsubst %,$(ODIR)/%,$(_OBJ)))
 
+
+source:=$(wildcard src/*.cpp)
+objects := $(patsubst src/%.cpp,obj/%.obj,$(wildcard src/*.cpp))
+
+SCRDIR=src
 .PHONY:
 all: rlike
 
@@ -18,11 +23,14 @@ withjadel:
 	$(CC) /c /Zi /EHsc /Iinclude /IW:/jadel2/export/include /std:c++latest ./src/*.cpp /Foobj/ 
 	$(CC) /Zi obj/*.obj W:/jadel2/export/lib/jadelmain.lib W:/jadel2/export/lib/jadel.lib /Febin/rlike.exe /link /SUBSYSTEM:WINDOWS
 
-rlike: $(OBJ)
+rlike: $(objects)
 	$(CC) /Zi $^ W:/jadel2/export/lib/jadelmain.lib W:/jadel2/export/lib/jadel.lib /Febin/$@ /link /SUBSYSTEM:WINDOWS
 
-$(ODIR)/%.obj: src/%.cpp
-	$(CC)  /c /Zi /EHsc /Iinclude /IW:/jadel2/export/include /std:c++latest $^ /Foobj/
+#$(objects): $(source)
+#	$(CC) /c /Zi /EHsc /Iinclude /IW:/jadel2/export/include /std:c++latest $^ /Foobj/
+
+obj/%.obj: src/%.cpp
+	$(CC) /c /Zi /EHsc /Iinclude /IW:/jadel2/export/include /std:c++latest $^ /Foobj/
 
 copyjadel:
 	$(CC)  /c /Zi /EHsc /Iinclude /IW:/jadel2/export/include /std:c++latest ./src/*.cpp /Foobj/ 
