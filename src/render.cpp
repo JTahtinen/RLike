@@ -7,12 +7,60 @@
 #include <vector>
 #include "screenobject.h"
 #include "font.h"
+#include <stdio.h>
 
 #define NUM_RENDERABLE_TYPES (2)
 #define MAX_RENDERABLES_PER_TYPE (250)
 #define SCREEN_OBJECT_POOL_SIZE (NUM_RENDERABLE_TYPES * MAX_RENDERABLES_PER_TYPE)
 
-#define STRING_POOL_SIZE (200)
+#define STRING_BUFFER_SIZE (500)
+
+#define FORMAT_SCREEN_STRING(buffer, bufferSize)                                                      \
+    {                                                                                                 \
+        char *stringBufferPointer = buffer;                                                           \
+        char *stringBufferEnd = buffer + bufferSize;                                                  \
+        va_list ap; /* points to each unnamed arg in turn */                                          \
+        const char *p, *sval;                                                                         \
+        int ival;                                                                                     \
+        double dval;                                                                                  \
+        va_start(ap, content); /* make ap point to 1st unnamed arg */                                 \
+        for (p = content; *p; p++)                                                                    \
+        {                                                                                             \
+            if (*p != '%')                                                                            \
+            {                                                                                         \
+                *stringBufferPointer = *p;                                                            \
+                ++stringBufferPointer;                                                                \
+                continue;                                                                             \
+            }                                                                                         \
+            switch (*++p)                                                                             \
+            {                                                                                         \
+            case 'd':                                                                                 \
+                ival = va_arg(ap, int);                                                               \
+                stringBufferPointer +=                                                                \
+                    snprintf(stringBufferPointer, stringBufferEnd - stringBufferPointer, "%d", ival); \
+                break;                                                                                \
+            case 'f':                                                                                 \
+                dval = va_arg(ap, double);                                                            \
+                stringBufferPointer +=                                                                \
+                    snprintf(stringBufferPointer, stringBufferEnd - stringBufferPointer, "%f", dval); \
+                break;                                                                                \
+            case 's':                                                                                 \
+                for (sval = va_arg(ap, char *); *sval; sval++)                                        \
+                {                                                                                     \
+                    snprintf(stringBufferPointer, stringBufferEnd - stringBufferPointer, "%s", sval); \
+                    ++stringBufferPointer;                                                            \
+                }                                                                                     \
+                break;                                                                                \
+            default:                                                                                  \
+                *stringBufferPointer = *p;                                                            \
+                ++stringBufferPointer;                                                                \
+                break;                                                                                \
+            }                                                                                         \
+        }                                                                                             \
+        *stringBufferPointer = '\0';                                                                  \
+        va_end(ap);                                                                                   \
+    }
+
 RenderLayer gameLayer;
 RenderLayer uiLayer;
 
@@ -24,12 +72,10 @@ static int yStart;
 static int xEnd;
 static int yEnd;
 
-
-static jadel::String *stringPool;
-static size_t numReservedStrings = 0;
+static char *stringBuffer;
 
 static ScreenObject *screenObjectPool;
-static size_t numReservedScreenObjects = 0; 
+static size_t numReservedScreenObjects = 0;
 
 static std::stack<jadel::Mat3> transformationStack;
 
@@ -40,6 +86,8 @@ static jadel::Mat3 identityMatrix(1.0f, 0, 0,
 static jadel::Mat3 viewMatrix(1.0f / 16.0f, 0.0f, 0.0f,
                               0.0f, 1.0f / 9.0f, 0.0f,
                               0.0f, 0.0f, 1.0f);
+
+void renderText(const char *text, jadel::Vec2 pos, float scale, const Font *font, ScreenObject *target);
 
 static void pushMatrix(jadel::Mat3 matrix)
 {
@@ -55,19 +103,66 @@ static bool popMatrix()
     return true;
 }
 
-jadel::String* reserveString()
+ScreenObject *reserveScreenObject()
 {
-    if (numReservedStrings == STRING_POOL_SIZE) return NULL;
-    jadel::String* result = &stringPool[numReservedStrings++];
+    if (numReservedScreenObjects == SCREEN_OBJECT_POOL_SIZE)
+        return NULL;
+    ScreenObject *result = &screenObjectPool[numReservedScreenObjects++];
     return result;
 }
 
-ScreenObject* reserveScreenObject()
+bool submitText(jadel::Vec2 pos, float scale, const Font *font, ScreenObject *target, const char *content, ...)
 {
-    if (numReservedScreenObjects == SCREEN_OBJECT_POOL_SIZE) return NULL;
-    ScreenObject* result = &screenObjectPool[numReservedScreenObjects++];
-    return result;
+    if (!content || *content == '\0' || !font || !target)
+        return false;
+    size_t stringLength = strlen(content);
+    if (stringLength >= STRING_BUFFER_SIZE)
+        return false;
+    FORMAT_SCREEN_STRING(stringBuffer, STRING_BUFFER_SIZE);
+    //    snprintf(stringBuffer, STRING_BUFFER_SIZE, content);
+    renderText(stringBuffer, pos, scale, font, target);
+    return true;
 }
+
+bool submitText(jadel::Vec2 pos, float scale, const Font *font, RenderLayer *layer, const char *content, ...)
+{
+    if (!content || *content == '\0' || !font || !layer)
+        return false;
+    size_t stringLength = strlen(content);
+    if (stringLength >= STRING_BUFFER_SIZE)
+        return false;
+    ScreenObject *scrObj = reserveScreenObject();
+    initScreenObject(jadel::Vec2(0, 0), scrObj);
+    FORMAT_SCREEN_STRING(stringBuffer, STRING_BUFFER_SIZE);
+    renderText(stringBuffer, pos, scale, font, scrObj);
+    submitRenderable(scrObj, layer);
+    return true;
+}
+/*
+bool submitText(const char *content, jadel::Vec2 pos, float scale, const Font *font, ScreenObject *target)
+{
+    if (!content || *content == '\0' || !font || !target)
+        return false;
+    size_t stringLength = strlen(content);
+    if (stringLength >= STRING_BUFFER_SIZE)
+        return false;
+    snprintf(stringBuffer, STRING_BUFFER_SIZE, content);
+    renderText(stringBuffer, pos, scale, font, target);
+    return true;
+}
+
+bool submitText(const char *content, jadel::Vec2 pos, float scale, const Font *font, RenderLayer *layer)
+{
+    if (!layer)
+        return false;
+    ScreenObject *scrObj = reserveScreenObject();
+    initScreenObject(pos, scrObj);
+    if (!submitText(content, jadel::Vec2(0, 0), scale, font, scrObj))
+        return false;
+    submitRenderable(scrObj, layer);
+    return true;
+
+}*/
 
 void renderSurface(const jadel::Surface *surface, jadel::Vec2 start, jadel::Vec2 end, jadel::Rectf sourceRect)
 {
@@ -98,14 +193,14 @@ void renderRect(jadel::Color color, jadel::Vec2 start, jadel::Vec2 end)
     renderRect(color.a, color.r, color.g, color.b, start, end);
 }
 
-void submitRenderable(ScreenObject* scrObj, RenderLayer *layer)
+void submitRenderable(ScreenObject *scrObj, RenderLayer *layer)
 {
     layer->screenObjects.emplace_back(scrObj);
 }
 
 void submitRenderable(const jadel::Surface *surface, jadel::Vec2 pos, jadel::Vec2 dimensions, jadel::Rectf sourceRect, RenderLayer *layer)
 {
-    ScreenObject* scrObj = reserveScreenObject();
+    ScreenObject *scrObj = reserveScreenObject();
     initScreenObject(pos, scrObj);
     ScreenSurface scrSurf = createScreenSurface(jadel::Vec2(0, 0), dimensions, sourceRect, surface);
     screenObjectPushScreenSurface(scrSurf, scrObj);
@@ -119,7 +214,7 @@ void submitRenderable(const jadel::Surface *surface, jadel::Vec2 pos, jadel::Vec
 
 void submitRenderable(const jadel::Color color, jadel::Vec2 pos, jadel::Vec2 dimensions, RenderLayer *layer)
 {
-    ScreenObject* scrObj = reserveScreenObject();
+    ScreenObject *scrObj = reserveScreenObject();
     initScreenObject(pos, scrObj);
     ScreenRect scrRect = createScreenRect(jadel::Vec2(0, 0), dimensions, color);
     screenObjectPushRect(scrRect, scrObj);
@@ -129,7 +224,7 @@ void submitRenderable(const jadel::Color color, jadel::Vec2 pos, jadel::Vec2 dim
 void flushLayer(RenderLayer *layer)
 {
     pushMatrix(viewMatrix);
-    for (ScreenObject* scrObj : layer->screenObjects)
+    for (ScreenObject *scrObj : layer->screenObjects)
     {
         uint32 surfacesRendered = 0;
         uint32 rectsRendered = 0;
@@ -191,8 +286,8 @@ bool systemInitRender(jadel::Window *window)
         return false;
 
     transformationStack.emplace(identityMatrix);
-    screenObjectPool = (ScreenObject*)jadel::memoryReserve(SCREEN_OBJECT_POOL_SIZE * sizeof(ScreenObject));
-    stringPool = (jadel::String*)jadel::memoryReserve(STRING_POOL_SIZE * sizeof(jadel::String));
+    screenObjectPool = (ScreenObject *)jadel::memoryReserve(SCREEN_OBJECT_POOL_SIZE * sizeof(ScreenObject));
+    stringBuffer = (char *)jadel::memoryReserve(STRING_BUFFER_SIZE);
     gameLayer.screenObjects.reserve(MAX_RENDERABLES_PER_TYPE);
     uiLayer.screenObjects.reserve(MAX_RENDERABLES_PER_TYPE);
     jadel::graphicsPushTargetSurface(&workingBuffer);
@@ -320,7 +415,7 @@ static void renderTiles()
     }
 }
 
-void renderText(const char *text, jadel::Vec2 pos, float scale, const Font *font, ScreenObject* target)
+void renderText(const char *text, jadel::Vec2 pos, float scale, const Font *font, ScreenObject *target)
 {
     const jadel::Surface *atlas = &font->fontAtlas;
 
@@ -332,7 +427,7 @@ void renderText(const char *text, jadel::Vec2 pos, float scale, const Font *font
     {
         const Letter *letter = &font->letters[(int)(*c)];
         jadel::Vec2 letterPos = jadel::Vec2((xAdvance + letter->xOffset) * scale,
-                                      font->info.base * scale - (letter->yOffset + letter->height) * scale);
+                                            font->info.base * scale - (letter->yOffset + letter->height) * scale);
         jadel::Rectf sourceRect = {letter->x, 1.0f - letter->y, letter->x + letter->width, 1.0f - letter->y - letter->height};
         screenObjectPushScreenSurface(pos + letterPos, jadel::Vec2(letter->width * scale, letter->height * scale), atlas, sourceRect, target);
         xAdvance += letter->xAdvance;
@@ -340,24 +435,18 @@ void renderText(const char *text, jadel::Vec2 pos, float scale, const Font *font
     }
 }
 
-void renderText(const char *text, jadel::Vec2 pos, float scale, const Font *font, RenderLayer* layer)
+jadel::Vec2 getTextScreenSize(const char *text, float scale, const Font *font)
 {
-    ScreenObject* scrObj = reserveScreenObject();
-    initScreenObject(pos, scrObj);
-    renderText(text, jadel::Vec2(0, 0), scale, font, scrObj);
-    submitRenderable(scrObj, layer);
-}
-
-jadel::Vec2 getTextScreenSize(const char* text, float scale, const Font* font)
-{
-    if (!text) return jadel::Vec2(0, 0);
+    if (!text)
+        return jadel::Vec2(0, 0);
     jadel::Vec2 result(0, 0);
     const char *c = text;
     while (*c)
     {
-        const Letter* letter = &font->letters[(int)(*c)];
+        const Letter *letter = &font->letters[(int)(*c)];
         result.x += letter->xAdvance * scale;
-        if (letter->height * scale > result.y) result.y = letter->height * scale; 
+        if (letter->height * scale > result.y)
+            result.y = letter->height * scale;
         ++c;
     }
     return result;
@@ -412,7 +501,7 @@ void render()
                                         {wScreenStart.x, wScreenStart.y, wScreenEnd.x, wScreenEnd.y});
         }
     }
- 
+
     flush();
     jadel::graphicsPopTargetSurface();
 }
