@@ -9,6 +9,7 @@
 #include "font.h"
 #include <string>
 #include <vector>
+#include "dialogbox.h"
 
 extern int screenTilemapW;
 extern int screenTilemapH;
@@ -107,20 +108,32 @@ struct Game
     size_t spriteTimerMillis;
     bool updateGame = true;
 
+    DialogBox testBox;
+
     Font font;
     AssetCollection assets;  
 };
 
 jadel::Recti getSectorScreenPos(int x, int y);
+
 jadel::Recti getSectorScreenPos(jadel::Point2i pos);
+
 jadel::Recti getSectorScreenPos(const Sector* sector);
+
 void addSectorItem(Sector* sector, Item* item);
+
 void initSector(int x, int y, const Tile *tile, Sector *target);
+
 Sector* getSectorFromPos(int x, int y);
+
 Sector* getSectorFromPos(jadel::Point2i pos);
+
 Sector* getSectorOfEntity(Entity* entity);
+
 Sector* getSectorOfGameObject(GameObject* gameObject);
+
 Sector* getSectorOfActor(Actor* actor);
+
 World *getWorldByID(uint32 ID);
 
 uint32 getPlayerWeaponID();
@@ -135,7 +148,10 @@ Item createHealthItem(int x, int y, AnimFrames frames, const char *name, int hea
 
 Item createIlluminatorItem(int x, int y, AnimFrames frames, const char *name, float illumination);
 
+bool load_PNG(const char *filename, jadel::Surface *target);
 
 void setGame(Game* game);
+
 bool initGame(jadel::Window* window);
+
 void updateGame();

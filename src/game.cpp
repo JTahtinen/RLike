@@ -8,6 +8,9 @@
 #include "inventory.h"
 #include "dice.h"
 #include <string>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 
 Game *currentGame;
 uint32 numIDs = 1;
@@ -19,6 +22,24 @@ int screenTilemapH;
 static ControlScheme gameCommands;
 
 float frameTime = 0;
+
+bool load_PNG(const char *filename, jadel::Surface *target)
+{
+    int width;
+    int height;
+    int channels;
+    target->pixels = stbi_load(filename, &width, &height, &channels, 0);
+    if (!target->pixels)
+        return false;
+    for (int i = 0; i < width * height; ++i)
+    {
+        uint8 *pixel = (uint8 *)target->pixels + (channels * i);
+        jadel::flipBytes(pixel, 3);
+    }
+    target->width = width;
+    target->height = height;
+    return true;
+}
 
 void resetPathNodes(World *world);
 
@@ -556,6 +577,7 @@ jadel::Point2i getCameraRight(jadel::Point2i camera)
 
 bool initGame(jadel::Window *window)
 {
+    stbi_set_flip_vertically_on_load(true);
     if (!currentGame)
     {
         jadel::message("Could not init game. Null game pointer.\n");
@@ -566,6 +588,26 @@ bool initGame(jadel::Window *window)
         jadel::message("Could not init game. Null window pointer.\n");
         return false;
     }
+
+    AssetCollection &assets = currentGame->assets;
+    // jadel::vectorInit(50, &assets.surfaces);
+    // jadel::vectorInit(50, &assets.names);
+    assets.loadSurface("res/missing.png");
+    assets.loadSurface("res/button.png");
+    assets.loadSurface("res/dude1.png");
+    assets.loadSurface("res/dude1l.png");
+    assets.loadSurface("res/clutter.png");
+    assets.loadSurface("res/grass.png");
+    assets.loadSurface("res/wall.png");
+    assets.loadSurface("res/poison.png");
+    assets.loadSurface("res/poison2.png");
+    assets.loadSurface("res/poison3.png");
+    assets.loadSurface("res/hpotion.png");
+    assets.loadSurface("res/hpotion2.png");
+    assets.loadSurface("res/hpotion3.png");
+    assets.loadSurface("res/portal.png");
+    assets.loadSurface("res/dagger.png");
+    assets.loadSurface("res/inventory3.png");
 
     if (!systemInitRender(window))
     {
@@ -602,24 +644,6 @@ bool initGame(jadel::Window *window)
     // currentGame->worlds = (World *)malloc(2 * sizeof(World));
     currentGame->worlds = (World *)jadel::memoryReserve(2 * sizeof(World));
     currentGame->numWorlds = 2;
-    AssetCollection &assets = currentGame->assets;
-    // jadel::vectorInit(50, &assets.surfaces);
-    // jadel::vectorInit(50, &assets.names);
-    assets.loadSurface("res/missing.png");
-    assets.loadSurface("res/dude1.png");
-    assets.loadSurface("res/dude1l.png");
-    assets.loadSurface("res/clutter.png");
-    assets.loadSurface("res/grass.png");
-    assets.loadSurface("res/wall.png");
-    assets.loadSurface("res/poison.png");
-    assets.loadSurface("res/poison2.png");
-    assets.loadSurface("res/poison3.png");
-    assets.loadSurface("res/hpotion.png");
-    assets.loadSurface("res/hpotion2.png");
-    assets.loadSurface("res/hpotion3.png");
-    assets.loadSurface("res/portal.png");
-    assets.loadSurface("res/dagger.png");
-
     const char *fontfile = "res/fonts/arial.fnt";
     if (!loadFont(fontfile, &currentGame->font))
     {
@@ -657,6 +681,8 @@ bool initGame(jadel::Window *window)
     initWorld(20, 10, &currentGame->worlds[0]);
     initWorld(8, 7, &currentGame->worlds[1]);
 
+    dialogBoxInit(&currentGame->testBox, jadel::Vec2(-0.9f, -0.9f), jadel::Vec2(4.0f, 3.0f), "Hello", assets.getSurface("res/inventory3.png"), DIALOG_BOX_HEADER | DIALOG_BOX_MOVABLE);
+    dialogBoxAddButton(&currentGame->testBox, "Button 1", assets.getSurface("res/button.png"), {0.7f, 0, 0, 1}, BUTTON_GRAPHICS_TEXT | BUTTON_GRAPHICS_IMAGE);
     Attributes playerAttrib = {
         .strength = 14,
         .dexterity = 12,
@@ -1083,6 +1109,10 @@ void updateGame()
             setNextFrame(&items[i]->gameObject);
         }
     }
+
+    dialogBoxUpdate(&currentGame->testBox);
+    dialogBoxRender(&currentGame->testBox, &uiLayer);
+
     auto actors = getActors();
     for (int i = 0; i < actors.size; ++i)
     {
@@ -1114,6 +1144,5 @@ void updateGame()
             .x = currentGame->player.gameObject.entity.pos.x - screenTilemapW / 2,
             .y = currentGame->player.gameObject.entity.pos.y - screenTilemapH / 2};
     currentGame->updateGame = false;
-
     render();
 }

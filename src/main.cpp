@@ -25,7 +25,7 @@ int JadelMain()
     jadel::Surface winSurface;
     jadel::graphicsCreateSurface(windowWidth, windowHeight, &winSurface);
     uint32* winPixels = (uint32*)winSurface.pixels;
-    jadel::memoryInit(MB(50));
+    jadel::memoryInit(MB(500));
     Game game;
     setGame(&game);
     if (!initGame(&window))
