@@ -8,23 +8,6 @@ static jadel::Vec2 mouseScreenPos(0, 0);
 static bool canLeftClickButton = true;
 static bool canRightClickButton = true;
 
-jadel::Rectf getScreenPosOfButton(int index, const DialogBox *box)
-{
-    jadel::Rectf result;
-
-    jadel::Vec2 boxPos = box->screenObject.pos;
-    float startX;
-    float startY;
-    float endX;
-    float endY;
-    
-    endY = boxPos.y + box->dimensions.y - (index * 1.2f) - 0.2f;
-    startY = endY - 0.6f;
-    startX = boxPos.x + 0.2f;
-    endX = boxPos.x + box->dimensions.x - 0.2f;
-    result = {startX, startY, endX, endY};
-    return result;
-}
 
 jadel::Rectf getPosOfButton(int index, const DialogBox *box)
 {
@@ -36,12 +19,21 @@ jadel::Rectf getPosOfButton(int index, const DialogBox *box)
     float startY;
     float endX;
     float endY;
-    
-    endY = box->dimensions.y - (index * 1.2f) - 0.2f;
+
+    endY = box->dimensions.y - (index * 0.6f) - 0.2f;
     startY = endY - 0.6f;
     startX = 0.2f;
     endX = box->dimensions.x - 0.2f;
     result = {startX, startY, endX, endY};
+    return result;
+}
+
+jadel::Rectf getScreenPosOfButton(int index, const DialogBox *box)
+{
+    jadel::Rectf result;
+    jadel::Rectf relPos = getPosOfButton(index, box);
+    jadel::Vec2 boxPos = box->screenObject.pos;
+    result = {boxPos.x + relPos.x0, boxPos.y + relPos.y0, boxPos.x + relPos.x1, boxPos.y + relPos.y1};
     return result;
 }
 
@@ -170,8 +162,8 @@ void dialogBoxRender(DialogBox *box, RenderLayer *layer)
     submitRenderable(scrObj, layer);
 }
 
-bool dialogBoxInit(DialogBox *target, jadel::Vec2 pos, jadel::Vec2 dimensions, const char *name, 
-                    const jadel::Surface *background, uint32 flags)
+bool dialogBoxInit(DialogBox *target, jadel::Vec2 pos, jadel::Vec2 dimensions, const char *name,
+                   const jadel::Surface *background, uint32 flags)
 {
     if (!target || !background)
         return false;
