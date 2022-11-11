@@ -2,6 +2,7 @@
 #include <jadel.h>
 #include <string.h>
 #include "render.h"
+#include "game.h"
 
 struct RawLetter
 {
