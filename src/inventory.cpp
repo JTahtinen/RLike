@@ -1,8 +1,9 @@
 #include "inventory.h"
 #include "game.h"
 #include "render.h"
+#include "math.h"
 
-static jadel::Surface inventorySurface;
+static const jadel::Surface* inventorySurface;
 static jadel::Color idleHeaderColor = {0.6f, 0.2f, 0.3f, 0.8f};
 static jadel::Color hoverHeaderColor = {0.6f, 0.3f, 0.4f, 1.0f};
 static jadel::Color hookedHeaderColor = {0.6f, 0.8f, 0.6f, 1.0f};
@@ -12,7 +13,8 @@ static const float SpriteSize = 1.5f;
 
 bool systemInitInventory()
 {
-    if (!load_PNG("res/inventory3.png", &inventorySurface))
+    inventorySurface = currentGame->assets.getSurface("res/inventory3.png");
+    if (!inventorySurface)
         return false;
     return true;
 }
@@ -71,16 +73,6 @@ ItemSlot *askInventorySlot(Inventory *inventory)
     return slot;
 }
 
-static bool cursorInRect(jadel::Vec2 mousePos, jadel::Vec2 start, jadel::Vec2 end)
-{
-    float xStart = start.x < end.x ? start.x : end.x;
-    float yStart = start.y < end.y ? start.y : end.y;
-    float xEnd = start.x < end.x ? end.x : start.x;
-    float yEnd = start.y < end.y ? end.y : start.y;
-    bool result = mousePos.x >= xStart && mousePos.x < xEnd && mousePos.y >= yStart && mousePos.y < yEnd;
-    return result;
-}
-
 jadel::Rectf getPosOfItem(int index, Inventory *inventory)
 {
     jadel::Rectf result;
@@ -127,7 +119,7 @@ void updateSubstateInventory(Inventory *inventory)
     mouseScreenPos.x *= 16.0f;
     mouseScreenPos.y *= 9.0f;
     static jadel::Vec2 hookPosition;
-    if (cursorInRect(mouseScreenPos, headerStart, headerEnd))
+    if (pointInRectf(mouseScreenPos, headerStart, headerEnd))
     {
         *headerColor = hoverHeaderColor;
         if (!inRenderable->hooked && jadel::inputLButtonDown)
@@ -166,7 +158,7 @@ void updateSubstateInventory(Inventory *inventory)
         if (slot->hasItem)
         {
             jadel::Rectf itemPos = getPosOfItem(foundItems, inventory);
-            if (cursorInRect(mouseScreenPos, jadel::Vec2(itemPos.x1, itemPos.y1), jadel::Vec2(itemPos.x0, itemPos.y0)))
+            if (pointInRectf(mouseScreenPos, jadel::Vec2(itemPos.x1, itemPos.y1), jadel::Vec2(itemPos.x0, itemPos.y0)))
             {
                 // jadel::message("Hovering over item %d\n", foundItems);
                 slot->hovered = true;
@@ -254,7 +246,8 @@ void setInventoryPos(jadel::Vec2 pos, InventoryRenderable *renderable)
 InventoryRenderable createInventoryRenderable(jadel::Vec2 pos, jadel::Vec2 dimensions)
 {
     InventoryRenderable renderable;
-    initScreenObject(pos, &renderable.screenObject);
+    initScreenObject(&renderable.screenObject);
+    screenObjectSetPos(pos, &renderable.screenObject);
     renderable.mainDimensions = dimensions;
     renderable.inventoryRadius = jadel::Vec2(dimensions.x * 0.5f, dimensions.y * 0.5f);
 
@@ -294,7 +287,7 @@ void renderInventory(Inventory *inventory)
 
         // renderSurface(&inventorySurface, openingStart, openingEnd);
 
-        screenObjectPushScreenSurface(openingStart, openingEnd - openingStart, &inventorySurface, scrObj);
+        screenObjectPushScreenSurface(openingStart, openingEnd - openingStart, inventorySurface, scrObj);
 
         // pushRenderable(renderable->screenObject, &uiLayer);
         if (renderable->elapsedTimeMS >= renderable->targetOpeningTimeMS)
@@ -305,7 +298,7 @@ void renderInventory(Inventory *inventory)
         submitRenderable(scrObj, &uiLayer);
         return;
     }
-    screenObjectPushScreenSurface(jadel::Vec2(0, 0), renderable->mainDimensions, &inventorySurface, scrObj);
+    screenObjectPushScreenSurface(jadel::Vec2(0, 0), renderable->mainDimensions, inventorySurface, scrObj);
     screenObjectPushRect(jadel::Vec2(0, renderable->mainDimensions.y), jadel::Vec2(renderable->mainDimensions.x, 0.4f), renderable->headerColor, scrObj);
     
     static jadel::Vec2 headerTextSize = getTextScreenSize("INVENTORY", 2.5f, &currentGame->font);
