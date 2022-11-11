@@ -1,8 +1,6 @@
 #include "render.h"
 #include "game.h"
 #include <jadel.h>
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
 #include <stack>
 #include <vector>
 #include "screenobject.h"
@@ -108,6 +106,7 @@ ScreenObject *reserveScreenObject()
     if (numReservedScreenObjects == SCREEN_OBJECT_POOL_SIZE)
         return NULL;
     ScreenObject *result = &screenObjectPool[numReservedScreenObjects++];
+    screenObjectClear(result);
     return result;
 }
 
@@ -132,7 +131,7 @@ bool submitText(jadel::Vec2 pos, float scale, const Font *font, RenderLayer *lay
     if (stringLength >= STRING_BUFFER_SIZE)
         return false;
     ScreenObject *scrObj = reserveScreenObject();
-    initScreenObject(jadel::Vec2(0, 0), scrObj);
+    screenObjectSetPos(jadel::Vec2(0, 0), scrObj);
     FORMAT_SCREEN_STRING(stringBuffer, STRING_BUFFER_SIZE);
     renderText(stringBuffer, pos, scale, font, scrObj);
     submitRenderable(scrObj, layer);
@@ -201,7 +200,7 @@ void submitRenderable(ScreenObject *scrObj, RenderLayer *layer)
 void submitRenderable(const jadel::Surface *surface, jadel::Vec2 pos, jadel::Vec2 dimensions, jadel::Rectf sourceRect, RenderLayer *layer)
 {
     ScreenObject *scrObj = reserveScreenObject();
-    initScreenObject(pos, scrObj);
+    screenObjectSetPos(pos, scrObj);
     ScreenSurface scrSurf = createScreenSurface(jadel::Vec2(0, 0), dimensions, sourceRect, surface);
     screenObjectPushScreenSurface(scrSurf, scrObj);
     submitRenderable(scrObj, layer);
@@ -215,7 +214,7 @@ void submitRenderable(const jadel::Surface *surface, jadel::Vec2 pos, jadel::Vec
 void submitRenderable(const jadel::Color color, jadel::Vec2 pos, jadel::Vec2 dimensions, RenderLayer *layer)
 {
     ScreenObject *scrObj = reserveScreenObject();
-    initScreenObject(pos, scrObj);
+    screenObjectSetPos(pos, scrObj);
     ScreenRect scrRect = createScreenRect(jadel::Vec2(0, 0), dimensions, color);
     screenObjectPushRect(scrRect, scrObj);
     submitRenderable(scrObj, layer);
@@ -259,27 +258,8 @@ void flush()
     numReservedScreenObjects = 0;
 }
 
-bool load_PNG(const char *filename, jadel::Surface *target)
-{
-    int width;
-    int height;
-    int channels;
-    target->pixels = stbi_load(filename, &width, &height, &channels, 0);
-    if (!target->pixels)
-        return false;
-    for (int i = 0; i < width * height; ++i)
-    {
-        uint8 *pixel = (uint8 *)target->pixels + (channels * i);
-        jadel::flipBytes(pixel, 3);
-    }
-    target->width = width;
-    target->height = height;
-    return true;
-}
-
 bool systemInitRender(jadel::Window *window)
 {
-    stbi_set_flip_vertically_on_load(true);
     if (!jadel::graphicsCreateSurface(window->width, window->height, &workingBuffer))
         return false;
     if (!jadel::graphicsCreateSurface(256, 256, &workingTileSurface))
@@ -287,6 +267,10 @@ bool systemInitRender(jadel::Window *window)
 
     transformationStack.emplace(identityMatrix);
     screenObjectPool = (ScreenObject *)jadel::memoryReserve(SCREEN_OBJECT_POOL_SIZE * sizeof(ScreenObject));
+    for (int i = 0; i < SCREEN_OBJECT_POOL_SIZE; ++i)
+    {
+        initScreenObject(&screenObjectPool[i]);
+    }
     stringBuffer = (char *)jadel::memoryReserve(STRING_BUFFER_SIZE);
     gameLayer.screenObjects.reserve(MAX_RENDERABLES_PER_TYPE);
     uiLayer.screenObjects.reserve(MAX_RENDERABLES_PER_TYPE);

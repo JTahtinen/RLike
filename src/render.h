@@ -1,7 +1,7 @@
 #pragma once
 #include <jadel.h>
+#include <vector>
 #include "screenobject.h"
-
 struct RenderLayer
 {
     std::vector<ScreenObject*> screenObjects;
@@ -18,7 +18,6 @@ jadel::Surface* getScreenBuffer();
 void submitRenderable(ScreenObject* scrObj, RenderLayer* layer);
 void submitRenderable(const jadel::Surface* surface, jadel::Vec2 pos, jadel::Vec2 dimensions, RenderLayer* layer);
 void submitRenderable(const jadel::Color color, jadel::Vec2 pos, jadel::Vec2 dimensions, RenderLayer* layer);
-bool load_PNG(const char *filename, jadel::Surface *target);
 
 bool submitText(jadel::Vec2 pos, float scale, const Font* font, ScreenObject* target, const char *content,  ...);
 bool submitText(jadel::Vec2 pos, float scale, const Font* font, RenderLayer* layer, const char *content,  ...);
