@@ -1,5 +1,4 @@
 #pragma once
-#include <vector>
 #include <jadel.h>
 
 #define MAX_SCREEN_SURFACES_PER_OBJECT (500)
@@ -33,15 +32,21 @@ struct ScreenObject
     /*std::vector<ScreenRect> screenRects;
     std::vector<ScreenSurface> screenSurfaces;
     std::vector<uint32> typeQueue;*/
-    ScreenRect screenRects[MAX_SCREEN_RECTS_PER_OBJECT];
-    ScreenSurface screenSurfaces[MAX_SCREEN_SURFACES_PER_OBJECT];
-    uint32 typeQueue[MAX_SCREEN_RECTS_PER_OBJECT + MAX_SCREEN_SURFACES_PER_OBJECT];
+    ScreenRect* screenRects;
+    ScreenSurface* screenSurfaces;
+    uint32* typeQueue;
     size_t numElements;
     size_t numRects;
     size_t numSurfaces;
 };
 
-bool initScreenObject(jadel::Vec2 pos, ScreenObject* target);
+bool initScreenObject(ScreenObject* target);
+
+void screenObjectSetPos(jadel::Vec2 pos, ScreenObject* target);
+
+void screenObjectFree(ScreenObject* target);
+
+void screenObjectClear(ScreenObject* target);
 
 ScreenRect createScreenRect(jadel::Vec2 pos, jadel::Vec2 dimensions, jadel::Color color);
 
@@ -58,5 +63,3 @@ void screenObjectPushRect(jadel::Vec2 pos, jadel::Vec2 dimensions, jadel::Color 
 void screenObjectPushScreenSurface(jadel::Vec2 pos, jadel::Vec2 dimensions, const jadel::Surface* surface, jadel::Rectf sourceRect, ScreenObject* target);
 
 void screenObjectPushScreenSurface(jadel::Vec2 pos, jadel::Vec2 dimensions, const jadel::Surface* surface, ScreenObject* target);
-
-void screenObjectClear(ScreenObject* screenObject);

@@ -1,9 +1,11 @@
 #include "screenobject.h"
 
-bool initScreenObject(jadel::Vec2 pos, ScreenObject* target)
+bool initScreenObject(ScreenObject* target)
 {
     if (!target) return false;
-    target->pos = pos;
+    target->screenRects = (ScreenRect*)jadel::memoryReserve(MAX_SCREEN_RECTS_PER_OBJECT * sizeof(ScreenRect));
+    target->screenSurfaces = (ScreenSurface*)jadel::memoryReserve(MAX_SCREEN_SURFACES_PER_OBJECT * sizeof(ScreenSurface));
+    target->typeQueue = (uint32*)jadel::memoryReserve((MAX_SCREEN_RECTS_PER_OBJECT + MAX_SCREEN_SURFACES_PER_OBJECT) * sizeof(uint32));
     //target->screenRects.reserve(15);
     //target->screenSurfaces.reserve(15);
     //target->typeQueue.reserve(30);
@@ -36,6 +38,32 @@ ScreenSurface createScreenSurface(jadel::Vec2 pos, jadel::Vec2 dimensions, const
 {
     ScreenSurface result = createScreenSurface(pos, dimensions, jadel::Rectf{0, 0, 1.0f, 1.0f}, surface);
     return result;
+}
+
+void screenObjectSetPos(jadel::Vec2 pos, ScreenObject* target)
+{
+    if (!target) return;
+    target->pos = pos;
+}
+
+void screenObjectFree(ScreenObject* target)
+{
+    if (!target) return;
+    jadel::memoryFree(target->screenRects);
+    jadel::memoryFree(target->screenSurfaces);
+    jadel::memoryFree(target->typeQueue);
+    target->screenRects = NULL;
+    target->screenSurfaces = NULL;
+    target->typeQueue = NULL;
+    screenObjectClear(target);
+}
+
+void screenObjectClear(ScreenObject* target)
+{
+    if (!target) return;
+    target->numElements = 0;
+    target->numRects = 0;
+    target->numSurfaces = 0;
 }
 
 void screenObjectPushScreenSurface(ScreenSurface surface, ScreenObject* target)
@@ -80,14 +108,4 @@ void screenObjectPushRect(jadel::Vec2 pos, jadel::Vec2 dimensions, jadel::Color 
 {
     ScreenRect rect = createScreenRect(pos, dimensions, color);
     screenObjectPushRect(rect, target);
-}
-
-void screenObjectClear(ScreenObject* screenObject)
-{
-    //screenObject->screenRects.clear();
-    //screenObject->screenSurfaces.clear();
-    //screenObject->typeQueue.clear();
-    screenObject->numElements = 0;
-    screenObject->numRects = 0;
-    screenObject->numSurfaces = 0;
 }
