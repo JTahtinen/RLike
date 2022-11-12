@@ -39,6 +39,8 @@ Item createItem(int x, int y, AnimFrames frames, const char *name, uint32 flags)
 
 Item createHealthItem(int x, int y, AnimFrames frames, const char *name, int healthModifier);
 
+Item createHealthItem(int x, int y, const GameObjectTemplate* obj, int healthModifier);
+
 Item createIlluminatorItem(int x, int y, AnimFrames frames, const char *name, float illumination);
 
 Item createWeaponItem(int x, int y, AnimFrames frames, const char* name, uint32 numDice, uint32 numFaces);

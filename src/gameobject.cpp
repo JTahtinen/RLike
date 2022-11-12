@@ -1,17 +1,31 @@
 #include "gameobject.h"
 
-GameObject createGameObject(int x, int y, AnimFrames frames, const char *name)
+
+
+GameObject createGameObject(int x, int y, AnimFrames frames, const char *name,  int maxHealth, bool affectedByLight)
 {
     GameObject result;
     result.entity = createEntity(x, y);
     result.posInsideSquare = {.x = 0, .y = 0};
     result.frames = frames;
     result.frames.currentFrameIndex = 0;
-    result.maxHealth = 100;
+    result.maxHealth = maxHealth;
     result.health = result.maxHealth;
-    jadel::String::init(&result.entity.name, name);
-    //strncpy(result.entity.name, name, sizeof(result.entity.name));
+    result.entity.name = name;
     result.alive = true;
+    result.affectedByLight = true;
+    return result;
+}
+
+GameObject createGameObject(int x, int y, AnimFrames frames, const char *name)
+{
+    GameObject result = createGameObject(x, y, frames, name, 100, true);
+    return result;
+}
+
+GameObject createGameObject(int x, int y, const GameObjectTemplate* obj)
+{
+    GameObject result = createGameObject(x, y, obj->frames, obj->name.c_str(), obj->maxHealth, obj->affectedByLight);
     return result;
 }
 

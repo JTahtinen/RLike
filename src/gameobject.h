@@ -8,6 +8,14 @@ struct AnimFrames
     int currentFrameIndex = 0;
 };
 
+struct GameObjectTemplate
+{
+    jadel::String name;
+    AnimFrames frames;
+    int maxHealth;
+    bool affectedByLight;
+};
+
 struct GameObject
 {
     Entity entity;
@@ -16,9 +24,12 @@ struct GameObject
     bool alive;
     int health;
     int maxHealth;
+    bool affectedByLight;
 };
 
 GameObject createGameObject(int x, int y, AnimFrames frames, const char *name);
+
+GameObject createGameObject(int x, int y, const GameObjectTemplate* obj);
 
 const jadel::Surface* getCurrentFrame(const GameObject* gameObject);
 

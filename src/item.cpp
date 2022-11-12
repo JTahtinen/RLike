@@ -46,6 +46,13 @@ Item createHealthItem(int x, int y, AnimFrames frames, const char *name, int hea
     return item;
 }
 
+Item createHealthItem(int x, int y, const GameObjectTemplate* obj, int healthModifier)
+{
+    Item item = createItem(x, y, obj->frames, obj->name.c_str(), ITEM_EFFECT_ADJUST_HEALTH | ITEM_EFFECT_CONSUMABLE);
+    item.healthModifier = healthModifier;
+    return item;
+}
+
 Item createIlluminatorItem(int x, int y, AnimFrames frames, const char *name, float illumination)
 {
     Item item = createItem(x, y, frames, name, ITEM_EFFECT_ILLUMINATE);
