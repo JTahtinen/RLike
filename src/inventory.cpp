@@ -122,7 +122,7 @@ void updateSubstateInventory(Inventory *inventory)
     if (pointInRectf(mouseScreenPos, headerStart, headerEnd))
     {
         *headerColor = hoverHeaderColor;
-        if (!inRenderable->hooked && jadel::inputLButtonDown)
+        if (!inRenderable->hooked && jadel::inputIsMouseLeftHeld())
         {
             inRenderable->hooked = true;
             hookPosition = mouseScreenPos - inPos;
@@ -136,19 +136,19 @@ void updateSubstateInventory(Inventory *inventory)
         inPos = mouseScreenPos - hookPosition;
     }
 
-    if (!jadel::inputLButtonDown)
+    if (!jadel::inputIsMouseLeftHeld())
         inRenderable->hooked = false;
 
     setInventoryPos(inPos, inRenderable);
 
     int foundItems = 0;
     static bool canLeftClickItem = true;
-    if (!jadel::inputLButtonDown)
+    if (!jadel::inputIsMouseLeftHeld())
     {
         canLeftClickItem = true;
     }
     static bool canRightClickItem = true;
-    if (!jadel::inputRButtonDown)
+    if (!jadel::inputIsMouseRightHeld())
     {
         canRightClickItem = true;
     }
@@ -162,12 +162,13 @@ void updateSubstateInventory(Inventory *inventory)
             {
                 // jadel::message("Hovering over item %d\n", foundItems);
                 slot->hovered = true;
-                if (canLeftClickItem && jadel::inputLButtonDown)
+                if (canLeftClickItem && jadel::inputIsMouseLeftHeld())
+        
                 {
                     useItemInSlot(slot);
                     canLeftClickItem = false;
                 }
-                else if (canRightClickItem && jadel::inputRButtonDown)
+                else if (canRightClickItem && jadel::inputIsMouseRightClicked())
                 {
                     dropItemInSlot(slot);
                     canRightClickItem = false;
@@ -182,6 +183,10 @@ void updateSubstateInventory(Inventory *inventory)
     }
 
     renderInventory(inventory);
+    if (isButtonState(currentGame->button2id, BUTTON_STATE_RELEASED, currentGame->testBox))
+    {
+       closeInventory(&currentGame->player.inventory);
+    }
     if (jadel::inputIsKeyTyped(jadel::KEY_I))
     {
         closeInventory(&currentGame->player.inventory);
