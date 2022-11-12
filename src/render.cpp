@@ -59,10 +59,13 @@
         va_end(ap);                                                                                   \
     }
 
+static void renderGameObjects();
+static void renderTiles();
 RenderLayer gameLayer;
 RenderLayer uiLayer;
 
 static jadel::Surface workingBuffer = {0};
+static jadel::Surface worldBuffer = {0};
 static jadel::Surface workingTileSurface = {0};
 
 static int xStart;
@@ -262,6 +265,8 @@ bool systemInitRender(jadel::Window *window)
 {
     if (!jadel::graphicsCreateSurface(window->width, window->height, &workingBuffer))
         return false;
+    if (!jadel::graphicsCreateSurface(window->width, window->height, &worldBuffer))
+        return false;
     if (!jadel::graphicsCreateSurface(256, 256, &workingTileSurface))
         return false;
 
@@ -315,8 +320,21 @@ static void renderBars()
     }
 }
 
+static void renderWorld()
+{
+    if (currentGame->updateCamera)
+    {
+        renderTiles();
+    }
+    jadel::graphicsCopyEqualSizeSurface(&worldBuffer);
+    renderGameObjects();
+}
+
 static void renderTiles()
 {
+    jadel::graphicsPushTargetSurface(&worldBuffer);
+    jadel::graphicsSetClearColor(0);
+    jadel::graphicsClearTargetSurface();
     for (int y = yStart; y < yEnd; ++y)
     {
         for (int x = xStart; x < xEnd; ++x)
@@ -340,9 +358,24 @@ static void renderTiles()
             {
                 jadel::graphicsCopyEqualSizeSurface(sectorSprite);
             }
+            jadel::graphicsMultiplyPixelValues(currentSector.illumination);
+            jadel::graphicsPopTargetSurface();
+            jadel::graphicsBlit(&workingTileSurface, entityDim);
+        }
+    }
+    jadel::graphicsPopTargetSurface();
+}
 
+void renderGameObjects()
+{
+    for (int y = yStart; y < yEnd; ++y)
+    {
+        for (int x = xStart; x < xEnd; ++x)
+        {
+            jadel::graphicsPushTargetSurface(&workingTileSurface);
+            Sector currentSector = currentGame->currentWorld->sectors[x + y * currentGame->currentWorld->width];
+            jadel::Recti entityDim = getSectorDimensions(x, y);
             const jadel::Surface *spriteToDraw = NULL;
-
             /*if (currentSector.occupant && !currentSector.occupant->transit.inTransit)
             {
                 AnimFrames* frames
@@ -360,17 +393,22 @@ static void renderTiles()
             else if (currentSector.numItems > 1)
             {
                 spriteToDraw = currentGame->assets.getSurface("res/clutter.png");
-                ;
             }
             if (spriteToDraw)
             {
-                jadel::graphicsBlit(spriteToDraw, {0, 0, 256, 256});
+                // jadel::graphicsBlit(spriteToDraw, {0, 0, 256, 256});
+                jadel::graphicsCopyEqualSizeSurface(spriteToDraw);
             }
-            jadel::graphicsMultiplyPixelValues(currentSector.illumination);
+            if (currentSector.occupant && currentSector.occupant->gameObject.affectedByLight)
+            {
+                jadel::graphicsMultiplyPixelValues(currentSector.illumination);
+            }
+
             jadel::graphicsPopTargetSurface();
-
-            jadel::graphicsBlit(&workingTileSurface, entityDim);
-
+            if (spriteToDraw)
+            {
+                jadel::graphicsBlit(&workingTileSurface, entityDim);
+            }
             /*
             for (int i = 0; i < currentGame->currentWorld->numActors; ++i)
             {
@@ -471,7 +509,8 @@ void render()
                 worldScreenDim.x1 = worldScreenEndDim.x0 - worldScreenDim.x0;
                 worldScreenDim.y1 = worldScreenEndDim.y0 - worldScreenDim.y0;
         */
-        renderTiles();
+        renderWorld();
+
         renderBars();
         if (currentGame->player.equippedWeapon)
         {
