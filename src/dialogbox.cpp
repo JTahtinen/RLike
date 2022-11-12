@@ -5,9 +5,10 @@
 #include <jadel.h>
 
 static jadel::Vec2 mouseScreenPos(0, 0);
-static bool canLeftClickButton = true;
-static bool canRightClickButton = true;
+// static bool canLeftClickButton = true;
+// static bool canRightClickButton = true;
 
+static jadel::Vec2 initiallyClickedPoint(0, 0);
 
 jadel::Rectf getPosOfButton(int index, const DialogBox *box)
 {
@@ -37,7 +38,36 @@ jadel::Rectf getScreenPosOfButton(int index, const DialogBox *box)
     return result;
 }
 
-void updateHeader(DialogBox *box)
+void updateClickable(Clickable *clickable, jadel::Vec2 start, jadel::Vec2 end)
+{
+    bool cursorOnClickable = pointInRectf(mouseScreenPos, start, end);
+
+    if ((jadel::inputIsMouseLeftReleased() || jadel::inputIsMouseLeftHeld()) && !pointInRectf(initiallyClickedPoint, start, end))
+    {
+        clickable->hovered = false;
+        clickable->clicked = false;
+        clickable->held = false;
+        clickable->released = false;
+        return;
+    }
+
+    if (cursorOnClickable)
+    {
+        clickable->hovered = true;
+        clickable->clicked = jadel::inputIsMouseLeftClicked();
+        clickable->held = jadel::inputIsMouseLeftHeld();
+        clickable->released = jadel::inputIsMouseLeftReleased();
+    }
+    else
+    {
+        clickable->hovered = false;
+        clickable->clicked = false;
+        clickable->held = false;
+        clickable->released = false;
+    }
+}
+
+void headerUpdate(DialogBox *box)
 {
     if (!(box->contentFlags & DIALOG_BOX_HEADER) || !(box->contentFlags & DIALOG_BOX_MOVABLE))
         return;
@@ -46,35 +76,29 @@ void updateHeader(DialogBox *box)
     jadel::Vec2 headerEnd(headerStart.x + box->dimensions.x, headerStart.y + box->headerHeight);
     jadel::Color *headerColor = &box->headerCurrentColor;
 
-    bool cursorOnHeader = pointInRectf(mouseScreenPos, headerStart, headerEnd);
+    Clickable *clickable = &box->headerClickable;
+    updateClickable(clickable, headerStart, headerEnd);
+
     if (box->hooked)
     {
         *headerColor = box->headerClickedColor;
         pos = mouseScreenPos - box->hookPosition;
     }
-    else if (!cursorOnHeader && jadel::inputLButtonDown)
+    else if (clickable->clicked)
     {
-        canLeftClickButton = false;
+        box->hooked = true;
+        box->hookPosition = mouseScreenPos - pos;
     }
-    else if (cursorOnHeader)
+    else if (clickable->hovered)
     {
-        if (canLeftClickButton)
-        {
-            if (!box->hooked && jadel::inputLButtonDown)
-            {
-                box->hooked = true;
-                box->hookPosition = mouseScreenPos - pos;
-            }
-            else
-            {
-                *headerColor = box->headerHoverColor;
-            }
-        }
+        *headerColor = box->headerHoverColor;
     }
     else
+    {
         *headerColor = box->headerIdleColor;
+    }
 
-    if (!jadel::inputLButtonDown)
+    if (!jadel::inputIsMouseLeftHeld())
         box->hooked = false;
 
     box->screenObject.pos = pos;
@@ -89,38 +113,23 @@ void dialogBoxUpdate(DialogBox *box)
     mouseScreenPos.x *= 16.0f;
     mouseScreenPos.y *= 9.0f;
 
-    if (!jadel::inputLButtonDown)
+    if (jadel::inputIsMouseLeftClicked())
     {
-        canLeftClickButton = true;
+        initiallyClickedPoint = mouseScreenPos;
     }
-    if (!jadel::inputRButtonDown)
+
+    if (box->contentFlags && DIALOG_BOX_HEADER)
     {
-        canRightClickButton = true;
+        headerUpdate(box);
     }
     for (int i = 0; i < box->buttons.size; ++i)
     {
         {
             Button *button = &box->buttons[i];
             jadel::Rectf buttonPos = getScreenPosOfButton(i, box);
-            if (pointInRectf(mouseScreenPos, jadel::Vec2(buttonPos.x1, buttonPos.y1), jadel::Vec2(buttonPos.x0, buttonPos.y0)))
-            {
-                button->isHovered = true;
-                if (canLeftClickButton && jadel::inputLButtonDown)
-                {
-                    jadel::message("Clicked button %d\n", i);
-                    button->isLeftClicked = true;
-                    canLeftClickButton = false;
-                }
-                else if (canRightClickButton && jadel::inputRButtonDown)
-                {
-                    button->isRightClicked = true;
-                    canRightClickButton = false;
-                }
-            }
-            else
-            {
-                button->isHovered = false;
-            }
+            jadel::Vec2 buttonStart(buttonPos.x1, buttonPos.y1);
+            jadel::Vec2 buttonEnd(buttonPos.x0, buttonPos.y0);
+            updateClickable(&button->clickable, buttonStart, buttonEnd);
         }
     }
 }
@@ -135,7 +144,6 @@ void dialogBoxRender(DialogBox *box, RenderLayer *layer)
     screenObjectPushScreenSurface(jadel::Vec2(0, 0), box->dimensions, box->background, scrObj);
     if (box->contentFlags && DIALOG_BOX_HEADER)
     {
-        updateHeader(box);
         screenObjectPushRect(jadel::Vec2(0, box->dimensions.y), jadel::Vec2(box->dimensions.x, box->headerHeight), box->headerCurrentColor, scrObj);
         static jadel::Vec2 headerTextSize = getTextScreenSize(box->headerString.c_str(), 2.5f, &currentGame->font);
         submitText(jadel::Vec2((box->dimensions.x * 0.5f) - (headerTextSize.x * 0.5f), box->dimensions.y + 0.03f), 2.5f,
@@ -148,13 +156,21 @@ void dialogBoxRender(DialogBox *box, RenderLayer *layer)
         jadel::Rectf buttonScreenArea = getPosOfButton(i, box);
         jadel::Vec2 buttonStart = jadel::Vec2(buttonScreenArea.x0, buttonScreenArea.y0);
         jadel::Vec2 buttonDim = jadel::Vec2(buttonScreenArea.x1, buttonScreenArea.y1) - buttonStart;
-        if ((button->contentFlags & BUTTON_GRAPHICS_IMAGE) && button->image)
-            screenObjectPushScreenSurface(buttonStart, buttonDim, button->image, scrObj);
+        if (button->contentFlags & BUTTON_GRAPHICS_IMAGE)
+        {
+            const jadel::Surface *buttonImage = button->clickable.held ? button->pressedImage : button->image;
+            if (buttonImage)
+            {
+                screenObjectPushScreenSurface(buttonStart, buttonDim, buttonImage, scrObj);
+            }
+        }
         if (button->contentFlags & BUTTON_GRAPHICS_COLOR)
+        {
             screenObjectPushRect(buttonStart, buttonDim, button->color, scrObj);
+        }
         if (button->contentFlags & BUTTON_GRAPHICS_TEXT)
         {
-            jadel::Vec2 textScreenSize = getTextScreenSize(button->text.c_str(), 4, &currentGame->font);
+            jadel::Vec2 textScreenSize = getTextScreenSize(button->text.c_str(), 3.2f, &currentGame->font);
             jadel::Vec2 textPos(box->dimensions.x * 0.5f - textScreenSize.x * 0.5f, buttonStart.y + 0.16f);
             submitText(textPos, 3.2f, &currentGame->font, scrObj, button->text.c_str());
         }
@@ -186,18 +202,51 @@ bool dialogBoxInit(DialogBox *target, jadel::Vec2 pos, jadel::Vec2 dimensions, c
         target->headerString = jadel::String(name);
     }
     target->hooked = false;
+    target->lastButtonID = 1;
     return true;
 }
 
-bool dialogBoxAddButton(DialogBox *target, const char *text, jadel::Surface *image, jadel::Color color, uint32 flags)
+bool isButtonState(uint32 id, uint32 state, DialogBox *box)
+{
+    if (!box)
+        return false;
+    Button *button;
+    for (int i = 0; i < box->buttons.size; ++i)
+    {
+        Button *currentButton = &box->buttons[i];
+        if (currentButton->id == id)
+        {
+            button = currentButton;
+            break;
+        }
+    }
+    if (!button)
+        return false;
+    switch (state)
+    {
+    case BUTTON_STATE_HOVERED:
+        return button->clickable.hovered;
+    case BUTTON_STATE_CLICKED:
+        return button->clickable.clicked;
+    case BUTTON_STATE_HELD:
+        return button->clickable.held;
+    case BUTTON_STATE_RELEASED:
+        return button->clickable.released;
+    }
+    return false;
+}
+
+uint32 dialogBoxAddButton(DialogBox *target, const char *text, const jadel::Surface *buttonImage, const jadel::Surface *buttonPressedImage, jadel::Color color, uint32 flags)
 {
     if (!target)
-        return false;
+        return 0;
     Button result;
     result.text = text;
-    result.image = image;
+    result.image = buttonImage;
+    result.pressedImage = buttonPressedImage;
     result.color = color;
     result.contentFlags = flags;
+    result.id = target->lastButtonID++;
     target->buttons.push(result);
-    return true;
+    return result.id;
 }
