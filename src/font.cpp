@@ -3,6 +3,7 @@
 #include <string.h>
 #include "render.h"
 #include "game.h"
+#include "imageload.h"
 
 struct RawLetter
 {
@@ -18,16 +19,16 @@ struct RawLetter
 
 
 
-bool loadFont(const char *filepath, Font *font)
+bool Font::loadFont(const char *filepath)
 {
     char* data = NULL;
     char *token = NULL;
     size_t numChars;
     RawLetter *letters = NULL;
 
-    if (!font || !jadel::readTextFileAndReserveMemory(filepath, &data, &numChars))
+    if (!jadel::readTextFileAndReserveMemory(filepath, &data, &numChars))
         return false;
-    FontInfo *info = &font->info;
+    FontInfo *info = &this->info;
     // char *token = strtok(data, "=");
     bool startfound = false;
     int fontElementsFound = 0;
@@ -170,7 +171,7 @@ bool loadFont(const char *filepath, Font *font)
     char fontPNGPath[40] = {0};
     strcpy(fontPNGPath, fontFolder);
     strcpy(&fontPNGPath[fontFolderSize], &info->file[0]);
-    if (!load_PNG(fontPNGPath, &font->fontAtlas))
+    if (!load_PNG(fontPNGPath, &this->fontAtlas))
     {
         return false;
     }
@@ -181,16 +182,16 @@ bool loadFont(const char *filepath, Font *font)
         Letter* modLetter = &modifiedLetters[rawLetter->id];
         //Letter* modLetter = &modifiedLetters[i];
         modLetter->id = rawLetter->id;
-        modLetter->x = (float)rawLetter->x / (float)font->fontAtlas.width;
-        modLetter->y = (float)rawLetter->y / (float)font->fontAtlas.height;
-        modLetter->width = (float)rawLetter->width / (float)font->fontAtlas.width;
-        modLetter->height = (float)rawLetter->height / (float)font->fontAtlas.height;
-        modLetter->xOffset = (float)rawLetter->xOffset / (float)font->fontAtlas.width;
-        modLetter->yOffset = (float)rawLetter->yOffset / (float)font->fontAtlas.height;
-        modLetter->xAdvance = (float)rawLetter->xAdvance / (float)font->fontAtlas.width;
+        modLetter->x = (float)rawLetter->x / (float)this->fontAtlas.width;
+        modLetter->y = (float)rawLetter->y / (float)this->fontAtlas.height;
+        modLetter->width = (float)rawLetter->width / (float)this->fontAtlas.width;
+        modLetter->height = (float)rawLetter->height / (float)this->fontAtlas.height;
+        modLetter->xOffset = (float)rawLetter->xOffset / (float)this->fontAtlas.width;
+        modLetter->yOffset = (float)rawLetter->yOffset / (float)this->fontAtlas.height;
+        modLetter->xAdvance = (float)rawLetter->xAdvance / (float)this->fontAtlas.width;
     }   
-    font->letters = modifiedLetters;
-    font->info.base /= (float)font->fontAtlas.height;   
+    this->letters = modifiedLetters;
+    this->info.base /= (float)this->fontAtlas.height;   
 
     jadel::memoryFree(data);
     jadel::memoryFree(letters);

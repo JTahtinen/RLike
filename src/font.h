@@ -28,8 +28,7 @@ struct Font
     //TODO: Change to pointer after creating asset manager
     jadel::Surface fontAtlas;
     Letter* letters;
+
+    bool loadFont(const char* filepath);
 };
 
-bool loadFont(const char* filepath, Font* font);
-
-void drawLetter(Letter* letter);
