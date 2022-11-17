@@ -5,12 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "render.h"
+#include "rendergame.h"
 #include "inventory.h"
 #include "dice.h"
+#include "globals.h"
 #include <string>
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
-
 
 Game *currentGame;
 uint32 numIDs = 1;
@@ -23,52 +22,7 @@ static ControlScheme gameCommands;
 
 float frameTime = 0;
 
-bool load_PNG(const char *filename, jadel::Surface *target)
-{
-    int width;
-    int height;
-    int channels;
-    target->pixels = stbi_load(filename, &width, &height, &channels, 0);
-    if (!target->pixels)
-        return false;
-    for (int i = 0; i < width * height; ++i)
-    {
-        uint8 *pixel = (uint8 *)target->pixels + (channels * i);
-        jadel::flipBytes(pixel, 3);
-    }
-    target->width = width;
-    target->height = height;
-    return true;
-}
-
 void resetPathNodes(World *world);
-
-jadel::Surface *AssetCollection::getSurface(const char *name)
-{
-    for (size_t i = 0; i < names.size(); ++i)
-    {
-        if (strncmp(names[i].c_str(), name, names[i].size()) == 0)
-        {
-            return &surfaces[i];
-        }
-    }
-    return getSurface("res/missing.png");
-}
-
-void AssetCollection::pushSurface(jadel::Surface surface, const char *name)
-{
-    this->surfaces.emplace_back(surface);
-    this->names.emplace_back(std::string(name));
-}
-
-bool AssetCollection::loadSurface(const char *filepath)
-{
-    jadel::Surface target;
-    if (!load_PNG(filepath, &target))
-        return false;
-    pushSurface(target, filepath);
-    return true;
-}
 
 World *getWorldByID(uint32 ID)
 {
@@ -92,14 +46,17 @@ bool setWorldByID(uint32 ID)
     }
     currentGame->currentWorld = world;
     resetPathNodes(currentGame->currentWorld);
-    for (int i = 0; i < currentGame->currentWorld->actors.size; ++i)
+
+    jadel::Node<Actor *> *currentActorNode = world->actors.head;
+    while (currentActorNode)
     {
-        ((Actor *)currentGame->currentWorld->actors[i])->clearPath();
+        currentActorNode->data->clearPath();
+        currentActorNode = currentActorNode->next;
     }
     return true;
 }
 
-jadel::Vector<Actor *> getActors()
+jadel::LinkedList<Actor *> &getActors()
 {
     return currentGame->currentWorld->actors;
 }
@@ -178,16 +135,23 @@ void setSectorOccupant(jadel::Point2i coords, Actor *occupant)
 
 void addSectorItem(Sector *sector, Item *item)
 {
-    if (sector && sector->numItems < 10)
-    {
-        sector->items[sector->numItems++] = item;
-    }
+    addSectorItem(sector, item, currentGame->currentWorld);
 }
 
 void addSectorItem(int x, int y, Item *item)
 {
+    addSectorItem(x, y, item, currentGame->currentWorld);
+}
+
+void removeSectorItem(Sector *sector, Item *item)
+{
+    removeSectorItem(sector, item, currentGame->currentWorld);
+}
+
+void removeSectorItem(int x, int y, Item *item)
+{
     Sector *sector = getSectorFromPos(x, y);
-    addSectorItem(sector, item);
+    removeSectorItem(sector, item);
 }
 
 bool moveTo(Sector *sector, Actor *actor)
@@ -234,6 +198,14 @@ bool move(int x, int y, Actor *actor)
     return false;
 }
 
+void killActor(Actor *actor)
+{
+    getSectorOfActor(actor)->occupant = NULL;
+    auto &actors = getActors();
+    actors.deleteWithValue(actor);
+    currentGame->actorFactory.release(actor);
+}
+
 void attack(Actor *attacker, Actor *target)
 {
     const char *weaponName;
@@ -271,10 +243,12 @@ void attack(Actor *attacker, Actor *target)
                    weaponName,
                    target->gameObject.entity.name.c_str(),
                    gameObject->health);
-    if (gameObject->health <= 0)
+    if (gameObject->health == 0)
     {
         gameObject->alive = false;
+
         jadel::message("%s was killed...\n", target->gameObject.entity.name.c_str());
+        killActor(target);
     }
 }
 
@@ -314,10 +288,6 @@ void combat(Actor *actor0, Actor *actor1)
     if (secondAttacker->gameObject.alive)
     {
         attack(secondAttacker, firstAttacker);
-    }
-    else
-    {
-        getSectorOfActor(secondAttacker)->occupant = NULL;
     }
 }
 
@@ -376,34 +346,6 @@ bool tryToMove(int x, int y, Actor *actor)
         combat(actor, attackTarget);
         return false;
     }
-}
-
-void initSector(int x, int y, const Tile *tile, Sector *target)
-{
-    target->pos = {x, y};
-    target->tile = tile;
-    target->occupant = NULL;
-    target->numItems = 0;
-    target->portal = NULL;
-    target->illumination = 0.0f;
-}
-
-int distanceBetweenSectors(const Sector *a, const Sector *b)
-{
-    jadel::Point2i posA = a->pos;
-    jadel::Point2i posB = b->pos;
-
-    if (posA.x == posB.x && posA.y == posB.y)
-        return 0;
-
-    int xDiff = jadel::absInt(posB.x - posA.x);
-    int yDiff = jadel::absInt(posB.y - posA.y);
-
-    int higherDiff = xDiff > yDiff ? xDiff : yDiff;
-    int lowerDiff = xDiff > yDiff ? yDiff : xDiff;
-
-    int result = lowerDiff * 14 + (higherDiff - lowerDiff) * 10;
-    return result;
 }
 
 AStarNode *getPathNode(int x, int y)
@@ -553,6 +495,27 @@ void calculatePath(const Sector *start, const Sector *destination, Actor *actor)
     }
 }
 
+void moveToSector(int x, int y, Item *item)
+{
+    if (!item)
+    {
+        return;
+    }
+    Sector *currentSector = getSectorOfGameObject(&item->gameObject);
+    if (!currentSector)
+    {
+        return;
+    }
+    Sector *nextSector = getSectorFromPos(x, y);
+    if (!nextSector)
+    {
+        return;
+    }
+    item->gameObject.entity.pos = {x, y};
+    removeSectorItem(currentSector, item);
+    addSectorItem(nextSector, item);
+}
+
 void moveToSector(int x, int y, Actor *actor)
 {
     getSectorOfActor(actor)->occupant = NULL;
@@ -577,7 +540,6 @@ jadel::Point2i getCameraRight(jadel::Point2i camera)
 
 bool initGame(jadel::Window *window)
 {
-    stbi_set_flip_vertically_on_load(true);
     if (!currentGame)
     {
         jadel::message("Could not init game. Null game pointer.\n");
@@ -589,31 +551,28 @@ bool initGame(jadel::Window *window)
         return false;
     }
 
-    AssetCollection &assets = currentGame->assets;
-    // jadel::vectorInit(50, &assets.surfaces);
-    // jadel::vectorInit(50, &assets.names);
-    assets.loadSurface("res/missing.png");
-    assets.loadSurface("res/button.png");
-    assets.loadSurface("res/dude1.png");
-    assets.loadSurface("res/dude1l.png");
-    assets.loadSurface("res/clutter.png");
-    assets.loadSurface("res/grass.png");
-    assets.loadSurface("res/wall.png");
-    assets.loadSurface("res/poison.png");
-    assets.loadSurface("res/poison2.png");
-    assets.loadSurface("res/poison3.png");
-    assets.loadSurface("res/hpotion.png");
-    assets.loadSurface("res/hpotion2.png");
-    assets.loadSurface("res/hpotion3.png");
-    assets.loadSurface("res/portal.png");
-    assets.loadSurface("res/dagger.png");
-    assets.loadSurface("res/inventory3.png");
-
-    if (!systemInitRender(window))
+    RendererInfo rendererInfo;
+    rendererInfo.screenObjectPoolSize = 500;
+    rendererInfo.stringBufferSize = 500;
+    rendererInfo.workingBufferDimensions = {window->width, window->height};
+    Renderer *renderer = &currentGame->gameRenderer;
+    if (!renderer->init(rendererInfo))
     {
         return false;
     }
+    currentGame->gameLayer = renderer->createLayer();
+    currentGame->uiLayer = renderer->createLayer();
+    /*
+        if (!systemInitRender(window))
+        {
+            return false;
+        }
+    */
 
+    if (!systemInitRenderGame(window, &currentGame->gameRenderer))
+    {
+        return false;
+    }
     if (!systemInitInventory())
     {
         return false;
@@ -626,12 +585,12 @@ bool initGame(jadel::Window *window)
 
     gameCommands.numKeyPressCommands = 4;
     gameCommands.numKeyTypeCommands = 3;
-    gameCommands.keyPress[0] = jadel::KEY_LEFT;
-    gameCommands.keyPress[1] = jadel::KEY_RIGHT;
-    gameCommands.keyPress[2] = jadel::KEY_UP;
-    gameCommands.keyPress[3] = jadel::KEY_DOWN;
-    gameCommands.keyType[0] = jadel::KEY_I;
-    gameCommands.keyType[1] = jadel::KEY_P;
+    gameCommands.keyPress[0] = jadel::KEY_A;
+    gameCommands.keyPress[1] = jadel::KEY_D;
+    gameCommands.keyPress[2] = jadel::KEY_W;
+    gameCommands.keyPress[3] = jadel::KEY_S;
+    gameCommands.keyType[0] = jadel::KEY_TAB;
+    gameCommands.keyType[1] = jadel::KEY_E;
     gameCommands.keyType[2] = jadel::KEY_L;
     gameCommands.keyPressCommands[0] = COMMAND_MOVE_LEFT;
     gameCommands.keyPressCommands[1] = COMMAND_MOVE_RIGHT;
@@ -641,66 +600,69 @@ bool initGame(jadel::Window *window)
     gameCommands.keyTypeCommands[1] = COMMAND_TAKE_ITEM;
     gameCommands.keyTypeCommands[2] = COMMAND_LOOK;
 
-    // currentGame->worlds = (World *)malloc(2 * sizeof(World));
     currentGame->worlds = (World *)jadel::memoryReserve(2 * sizeof(World));
     currentGame->numWorlds = 2;
-    const char *fontfile = "res/fonts/arial.fnt";
-    if (!loadFont(fontfile, &currentGame->font))
-    {
-        jadel::message("[ERROR] Could not load font %s\n", fontfile);
-        return false;
-    }
-    currentGame->actors = (Actor *)jadel::memoryReserve(MAX_ACTORS * sizeof(Actor));
-    currentGame->items = (Item *)jadel::memoryReserve(MAX_GAMEOBJECTS * sizeof(Item));
-    currentGame->gameObjects = (GameObject *)jadel::memoryReserve(MAX_GAMEOBJECTS * sizeof(GameObject));
 
+    currentGame->actorFactory.init(MAX_ACTORS);
+    currentGame->gameObjectFactory.init(MAX_GAMEOBJECTS);
+    currentGame->itemFactory.init(MAX_GAMEOBJECTS);
     AnimFrames playerFrames;
-    playerFrames.sprites[0] = assets.getSurface("res/dude1.png");
-    playerFrames.sprites[1] = assets.getSurface("res/dude1l.png");
+    playerFrames.sprites[0] = g_Assets.getSurface("res/dude1.png");
+    playerFrames.sprites[1] = g_Assets.getSurface("res/dude1l.png");
     playerFrames.numFrames = 2;
 
     AnimFrames healthPackFrames;
-    healthPackFrames.sprites[0] = assets.getSurface("res/hpotion.png");
-    healthPackFrames.sprites[1] = assets.getSurface("res/hpotion2.png");
-    healthPackFrames.sprites[2] = assets.getSurface("res/hpotion3.png");
+    healthPackFrames.sprites[0] = g_Assets.getSurface("res/hpotion.png");
+    healthPackFrames.sprites[1] = g_Assets.getSurface("res/hpotion2.png");
+    healthPackFrames.sprites[2] = g_Assets.getSurface("res/hpotion3.png");
     healthPackFrames.numFrames = 3;
 
     AnimFrames poisonFrames;
-    poisonFrames.sprites[0] = assets.getSurface("res/poison.png");
-    poisonFrames.sprites[1] = assets.getSurface("res/poison2.png");
-    poisonFrames.sprites[2] = assets.getSurface("res/poison3.png");
+    poisonFrames.sprites[0] = g_Assets.getSurface("res/poison.png");
+    poisonFrames.sprites[1] = g_Assets.getSurface("res/poison2.png");
+    poisonFrames.sprites[2] = g_Assets.getSurface("res/poison3.png");
     poisonFrames.numFrames = 3;
 
     AnimFrames daggerFrames;
-    daggerFrames.sprites[0] = assets.getSurface("res/dagger.png");
+    daggerFrames.sprites[0] = g_Assets.getSurface("res/dagger.png");
     daggerFrames.numFrames = 1;
 
-    currentGame->walkTile = {.surface = assets.getSurface("res/grass.png"), .barrier = false};
-    currentGame->wallTile = {.surface = assets.getSurface("res/wall.png"), .barrier = true};
+    currentGame->walkTile = {.surface = g_Assets.getSurface("res/grass.png"), .barrier = false};
+    currentGame->wallTile = {.surface = g_Assets.getSurface("res/wall.png"), .barrier = true};
 
     initWorld(20, 10, &currentGame->worlds[0]);
     initWorld(8, 7, &currentGame->worlds[1]);
 
-    dialogBoxInit(&currentGame->testBox, jadel::Vec2(-0.9f, -0.9f), jadel::Vec2(4.0f, 3.0f), "Hello", assets.getSurface("res/inventory3.png"), DIALOG_BOX_HEADER | DIALOG_BOX_MOVABLE);
-    dialogBoxAddButton(&currentGame->testBox, "Button 1", assets.getSurface("res/button.png"), {0.7f, 0, 0, 1}, BUTTON_GRAPHICS_TEXT | BUTTON_GRAPHICS_IMAGE);
+    currentGame->testBox = (DialogBox *)jadel::memoryReserve(sizeof(DialogBox));
+
+    dialogBoxInit(currentGame->testBox, jadel::Vec2(12.0f, -9.0f), jadel::Vec2(4.0f, 3.0f), "Hello", g_Assets.getSurface("res/inventory3.png"), 0);
+    currentGame->button1id = dialogBoxAddButton(currentGame->testBox, "Memory info", g_Assets.getSurface("res/bup.png"), g_Assets.getSurface("res/bdown.png"), {0.7f, 0, 0, 1}, BUTTON_GRAPHICS_TEXT | BUTTON_GRAPHICS_IMAGE);
+    currentGame->button2id = dialogBoxAddButton(currentGame->testBox, "Inventory", g_Assets.getSurface("res/bup.png"), g_Assets.getSurface("res/bdown.png"), {0.7f, 0, 0, 1}, BUTTON_GRAPHICS_TEXT | BUTTON_GRAPHICS_IMAGE);
+    currentGame->button3id = dialogBoxAddButton(currentGame->testBox, "Quit Game", g_Assets.getSurface("res/bup.png"), g_Assets.getSurface("res/bdown.png"), {0.7f, 0, 0, 1}, BUTTON_GRAPHICS_TEXT | BUTTON_GRAPHICS_IMAGE);
     Attributes playerAttrib = {
-        .strength = 14,
+        .strength = 10,
         .dexterity = 12,
         .constitution = 30,
         .intelligence = 11,
         .wisdom = 10,
         .charisma = 10};
     currentGame->player = createActor(3, 2, playerFrames, "Player", &playerAttrib);
-    currentGame->worlds[0].actors.push(&currentGame->player);
+    currentGame->worlds[0].actors.append(&currentGame->player);
     // currentGame->worlds[1].actors.push(&currentGame->player);
-    currentGame->worlds[0].actors[0]->gameObject.entity.pos = {3, 2};
+
+    GameObjectTemplate healthPackTemplate;
+    healthPackTemplate.affectedByLight = false;
+    healthPackTemplate.frames = healthPackFrames;
+    healthPackTemplate.maxHealth = 100;
+    healthPackTemplate.name = "Health potion";
+
     pushActor(2, 1, playerFrames, "Teuvo", &currentGame->worlds[1]);
     pushActor(4, 3, playerFrames, "Jouko", &currentGame->worlds[0]);
-    pushItem(createHealthItem(6, 5, healthPackFrames, "Health potion", 20), &currentGame->worlds[1]);
+    pushItem(createHealthItem(6, 5, &healthPackTemplate, 20), &currentGame->worlds[1]);
     pushItem(createHealthItem(8, 6, poisonFrames, "Poison", -10), &currentGame->worlds[0]);
-    pushItem(createHealthItem(9, 4, healthPackFrames, "Health potion", 20), &currentGame->worlds[0]);
-    pushItem(createHealthItem(10, 4, healthPackFrames, "Health potion", 20), &currentGame->worlds[0]);
-    pushItem(createHealthItem(9, 5, healthPackFrames, "Health potion", 20), &currentGame->worlds[0]);
+    pushItem(createHealthItem(9, 4, &healthPackTemplate, 20), &currentGame->worlds[0]);
+    pushItem(createHealthItem(10, 4, &healthPackTemplate, 20), &currentGame->worlds[0]);
+    pushItem(createHealthItem(9, 5, &healthPackTemplate, 20), &currentGame->worlds[0]);
     pushItem(createHealthItem(9, 4, poisonFrames, "Poison", -10), &currentGame->worlds[0]);
     pushItem(createIlluminatorItem(6, 5, {0}, "Light", 150.0f), &currentGame->worlds[0]);
     pushItem(createIlluminatorItem(18, 3, {0}, "Light", 150.0f), &currentGame->worlds[0]);
@@ -709,8 +671,8 @@ bool initGame(jadel::Window *window)
     resetPathNodes(&currentGame->worlds[0]);
     resetPathNodes(&currentGame->worlds[1]);
 
-    currentGame->worlds[0].portals[0] = {assets.getSurface("res/portal.png"), 1, currentGame->worlds[1].entity.id, &currentGame->worlds[0].sectors[2]};
-    currentGame->worlds[1].portals[0] = {assets.getSurface("res/portal.png"), 1, currentGame->worlds[0].entity.id, &currentGame->worlds[1].sectors[3 + 4 * currentGame->worlds[1].width]};
+    currentGame->worlds[0].portals[0] = {g_Assets.getSurface("res/portal.png"), 1, currentGame->worlds[1].entity.id, &currentGame->worlds[0].sectors[2]};
+    currentGame->worlds[1].portals[0] = {g_Assets.getSurface("res/portal.png"), 1, currentGame->worlds[0].entity.id, &currentGame->worlds[1].sectors[3 + 4 * currentGame->worlds[1].width]};
     currentGame->worlds[0].numPortals++;
     currentGame->worlds[1].numPortals++;
 
@@ -719,70 +681,69 @@ bool initGame(jadel::Window *window)
         currentGame->currentWorld = &currentGame->worlds[i];
         World *curWorld = currentGame->currentWorld;
 
-        for (int a = 0; a < curWorld->actors.size; ++a)
+        jadel::Node<Actor *> *currentActorNode = curWorld->actors.head;
+        while (currentActorNode)
         {
-            jadel::Point2i actorPos = ((Actor *)curWorld->actors[a])->gameObject.entity.pos;
-            setSectorOccupant(actorPos.x, actorPos.y, ((Actor *)curWorld->actors[a]));
+            jadel::Point2i actorPos = currentActorNode->data->gameObject.entity.pos;
+            setSectorOccupant(actorPos.x, actorPos.y, currentActorNode->data);
+            currentActorNode = currentActorNode->next;
         }
-
-        for (int j = 0; j < curWorld->items.size; ++j)
-        {
-            jadel::Point2i itemPos = ((Item *)curWorld->items[j])->gameObject.entity.pos;
-            addSectorItem(itemPos.x, itemPos.y, ((Item *)curWorld->items[j]));
-        }
+        calculateLights(curWorld);
     }
-
-    jadel::String testString = *getName(&currentGame->player) + *getName(&currentGame->actors[1]);
-
-    jadel::message("%s\n", testString.c_str());
     setPortal(2, 0, currentGame->worlds[0].entity.id, 3, 4, currentGame->worlds[1].entity.id);
-
-    for (int w = 0; w < currentGame->numWorlds; ++w)
-    {
-        World *world0 = &currentGame->worlds[w];
-        for (int i = 0; i < world0->width * world0->height; ++i)
+    /*
+        for (int w = 0; w < currentGame->numWorlds; ++w)
         {
-            Sector *currentSector = &world0->sectors[i];
-            for (int itemI = 0; itemI < currentSector->numItems; ++itemI)
+            World *world0 = &currentGame->worlds[w];
+            for (int i = 0; i < world0->width * world0->height; ++i)
             {
-                Item *item = currentSector->items[itemI];
-                if (item->flags & ITEM_EFFECT_ILLUMINATE)
+                Sector *currentSector = &world0->sectors[i];
+                for (int itemI = 0; itemI < currentSector->numItems; ++itemI)
                 {
-                    float illumination = item->illumination;
-                    for (int j = 0; j < world0->width * world0->height; ++j)
+                    Item *item = currentSector->items[itemI];
+                    if (item->flags & ITEM_EFFECT_ILLUMINATE)
                     {
-                        Sector *illuminateSector = &world0->sectors[j];
-                        jadel::Point2i sectorPos = illuminateSector->pos;
-                        int dist;
-                        if (illuminateSector == currentSector)
+                        float illumination = item->illumination;
+                        for (int j = 0; j < world0->width * world0->height; ++j)
                         {
-                            dist = item->distanceFromGround;
+                            Sector *illuminateSector = &world0->sectors[j];
+                            jadel::Point2i sectorPos = illuminateSector->pos;
+                            int dist;
+                            if (illuminateSector == currentSector)
+                            {
+                                dist = item->distanceFromGround;
+                            }
+                            else
+                            {
+                                dist = distanceBetweenSectors(currentSector, illuminateSector) / 3;
+                                dist = (int)sqrtf((float)dist * (float)dist + (float)item->distanceFromGround * (float)item->distanceFromGround);
+                            }
+                            illuminateSector->illumination += (illumination / (float)(dist * dist));
                         }
-                        else
-                        {
-                            dist = distanceBetweenSectors(currentSector, illuminateSector) / 3;
-                            dist = (int)sqrtf((float)dist * (float)dist + (float)item->distanceFromGround * (float)item->distanceFromGround);
-                        }
-                        illuminateSector->illumination += (illumination / (float)(dist * dist));
                     }
                 }
-            }
-        }
-    }
+            }*/
+
     // currentGame->worlds[0].sectors[2].portal = &currentGame->worlds[0].portals[0];
     // currentGame->worlds[1].sectors[3 + 4 * currentGame->worlds[1].width].portal = &currentGame->worlds[1].portals[0];
     currentGame->currentWorld = &currentGame->worlds[0];
 
     currentGame->player.inventory.useMode = false;
 
-    currentGame->updateGame = true;
+    currentGame->updateCamera = true;
 
+    currentGame->screenPos =
+        {
+            .x = currentGame->player.gameObject.entity.pos.x - screenTilemapW / 2,
+            .y = currentGame->player.gameObject.entity.pos.y - screenTilemapH / 2};
     currentGame->currentState = SUBSTATE_GAME;
     currentGame->window = window;
     currentGame->playerCanMove = true;
     currentGame->moveTimerMillis = 0;
     currentGame->spriteTimerMillis = 0;
     currentGame->spriteTimer.start();
+    currentGame->gameRenderer.render();
+    renderGame();
     return true;
 }
 
@@ -836,6 +797,10 @@ void executeCommand(uint32 command, Actor *actor)
         break;
     }
     }
+    jadel::Node<Item *> *lightNode = currentGame->worlds[0].lights.head;
+    if (jadel::inputIsKeyTyped(jadel::KEY_O))
+    {
+    }
     if (actor->followingPath && moved)
     {
         if (getSectorOfActor(actor) == actor->path[actor->pathLength - 1 - actor->pathStepsTaken])
@@ -870,21 +835,29 @@ uint32 getSectorDir(jadel::Point2i currentPos, const Sector *sector)
     return COMMAND_NULL;
 }
 
+void pushCommand(uint32 command)
+{
+    if (command > COMMAND_NULL && command < COMMAND_COUNT)
+    {
+        currentGame->commandQueue[currentGame->numCommands++] = command;
+    }
+}
+
 void updateSubstateGame()
 {
-    currentGame->numCommands = 0;
+
     for (int i = 0; i < gameCommands.numKeyTypeCommands; ++i)
     {
         if (jadel::inputIsKeyTyped(gameCommands.keyType[i]))
         {
-            currentGame->commandQueue[currentGame->numCommands++] = gameCommands.keyTypeCommands[i];
+            pushCommand(gameCommands.keyTypeCommands[i]);
         }
     }
     for (int i = 0; i < gameCommands.numKeyPressCommands; ++i)
     {
         if (jadel::inputIsKeyPressed(gameCommands.keyPress[i]))
         {
-            currentGame->commandQueue[currentGame->numCommands++] = gameCommands.keyPressCommands[i];
+            pushCommand(gameCommands.keyPressCommands[i]);
         }
     }
     if (jadel::inputIsKeyTyped(jadel::KEY_K))
@@ -893,7 +866,6 @@ void updateSubstateGame()
         {
             const Sector *nextSector = currentGame->player.path[currentGame->player.pathLength - 1 - currentGame->player.pathStepsTaken++];
             moveToSector(nextSector->pos.x, nextSector->pos.y, &currentGame->player);
-            currentGame->updateGame = true;
         }
     }
 
@@ -909,8 +881,6 @@ void updateSubstateGame()
                 if (tryToMove(-20, 0, &currentGame->player))
                     playerMoved = true;
                 setFrame(1, &currentGame->player);
-
-                currentGame->updateGame = true;
             }
             break;
         }
@@ -921,7 +891,6 @@ void updateSubstateGame()
                 if (tryToMove(20, 0, &currentGame->player))
                     playerMoved = true;
                 setFrame(0, &currentGame->player);
-                currentGame->updateGame = true;
             }
             break;
         }
@@ -931,7 +900,6 @@ void updateSubstateGame()
             {
                 if (tryToMove(0, 20, &currentGame->player))
                     playerMoved = true;
-                currentGame->updateGame = true;
             }
             break;
         }
@@ -941,7 +909,6 @@ void updateSubstateGame()
             {
                 if (tryToMove(0, -20, &currentGame->player))
                     playerMoved = true;
-                currentGame->updateGame = true;
             }
             break;
         }
@@ -956,7 +923,8 @@ void updateSubstateGame()
         {
             Sector *sector = getSectorFromPos(currentGame->player.gameObject.entity.pos.x,
                                               currentGame->player.gameObject.entity.pos.y);
-            if (sector->numItems > 0)
+            jadel::Node<Item *> *currentItemNode = sector->items.head;
+            if (currentItemNode)
             {
                 ItemSlot *slot = NULL;
                 for (int i = 0; i < 10; ++i)
@@ -969,11 +937,12 @@ void updateSubstateGame()
                 }
                 if (slot)
                 {
-                    Item *item = sector->items[sector->numItems - 1];
+                    Item *item = currentItemNode->data;
                     slot->item = item;
-                    --sector->numItems;
                     jadel::message("Picked up %s\n", item->gameObject.entity.name.c_str());
                     slot->hasItem = true;
+                    removeSectorItem(sector, item);
+                    currentGame->updateCamera = true;
                 }
                 else
                 {
@@ -989,16 +958,19 @@ void updateSubstateGame()
         case COMMAND_LOOK:
         {
             Sector *curSector = getSectorOfEntity(&currentGame->player.gameObject.entity);
-            if (curSector->numItems == 0)
+            jadel::Node<Item *> *currentItemNode = curSector->items.head;
+            if (!currentItemNode)
             {
                 jadel::message("Nothing here...\n");
             }
             else
             {
-                jadel::message("You see:\n");
-                for (int i = 0; i < curSector->numItems; ++i)
+                while (currentItemNode)
                 {
-                    jadel::message("%d: %s\n", i + 1, curSector->items[i]->gameObject.entity.name.c_str());
+                    jadel::message("You see:\n");
+                    jadel::message("%d: %s\n", i + 1, currentItemNode->data->gameObject.entity.name.c_str());
+
+                    currentItemNode = currentItemNode->next;
                 }
             }
             break;
@@ -1008,16 +980,10 @@ void updateSubstateGame()
             break;
         }
     }
-    if (jadel::inputIsKeyTyped(jadel::KEY_C))
-    {
-        currentGame->player.clearPath();
-        calculatePath(getSectorOfActor(&currentGame->player),
-                      getSectorOfGameObject(&currentGame->currentWorld->items[0]->gameObject), &currentGame->player);
-        currentGame->updateGame = true;
-    }
+
     if (jadel::inputIsKeyTyped(jadel::KEY_V))
     {
-        Actor *actor = getActors()[1];
+        Actor *actor = *getActors().getHead();
         actor->followingPath = !actor->followingPath;
         if (actor->followingPath)
         {
@@ -1026,7 +992,7 @@ void updateSubstateGame()
         }
     }
 
-    if (jadel::inputIsKeyTyped(jadel::KEY_M))
+    if (playerMoved) // jadel::inputIsKeyTyped(jadel::KEY_M))
     {
         Portal *portal = getSectorOfActor(&currentGame->player)->portal;
         if (portal)
@@ -1042,7 +1008,6 @@ void updateSubstateGame()
 
                     // setSectorOccupant(targetPortal->sector->pos, &currentGame->player);
                     moveTo(targetPortal->sector, &currentGame->player);
-                    currentGame->updateGame = true;
                 }
             }
         }
@@ -1050,6 +1015,7 @@ void updateSubstateGame()
 
     if (playerMoved)
     {
+        currentGame->updateCamera = true;
         currentGame->playerCanMove = false;
         currentGame->moveTimer.start();
     }
@@ -1072,10 +1038,14 @@ void updateSubstateGame()
 
 void updateGame()
 {
-    if (jadel::inputIsKeyPressed(jadel::KEY_ESCAPE))
+    currentGame->updateCamera = false;
+    Renderer *renderer = &currentGame->gameRenderer;
+    dialogBoxUpdate(currentGame->testBox);
+    if (jadel::inputIsKeyPressed(jadel::KEY_ESCAPE) || isButtonState(currentGame->button3id, BUTTON_STATE_RELEASED, currentGame->testBox))
     {
         exit(0);
     }
+    currentGame->numCommands = 0;
     // jadel::message("%f %f\n", jadel::inputGetMouseXRelative(), jadel::inputGetMouseYRelative());
     if (!currentGame->playerCanMove)
     {
@@ -1085,6 +1055,10 @@ void updateGame()
             currentGame->moveTimerMillis %= 125;
             currentGame->playerCanMove = true;
         }
+    }
+    if (isButtonState(currentGame->button2id, BUTTON_STATE_RELEASED, currentGame->testBox))
+    {
+        pushCommand(COMMAND_TOGGLE_INVENTORY);
     }
     switch (currentGame->currentState)
     {
@@ -1103,20 +1077,22 @@ void updateGame()
     if (currentGame->spriteTimerMillis >= 333)
     {
         currentGame->spriteTimerMillis %= 333;
-        jadel::Vector<Item *> &items = currentGame->currentWorld->items;
-        for (size_t i = 0; i < items.size; ++i)
+        auto &items = currentGame->currentWorld->items;
+        jadel::Node<Item *> *currentItemNode = items.head;
+        while (currentItemNode)
         {
-            setNextFrame(&items[i]->gameObject);
+            setNextFrame(&currentItemNode->data->gameObject);
+            currentItemNode = currentItemNode->next;
         }
     }
 
-    dialogBoxUpdate(&currentGame->testBox);
-    dialogBoxRender(&currentGame->testBox, &uiLayer);
+    dialogBoxRender(currentGame->testBox, currentGame->uiLayer, &currentGame->gameRenderer);
 
     auto actors = getActors();
-    for (int i = 0; i < actors.size; ++i)
+    jadel::Node<Actor *> *currentActorNode = actors.head;
+    while (currentActorNode)
     {
-        Actor *actor = actors[i];
+        Actor *actor = currentActorNode->data;
         if (actor->followingPath && actor->pathStepsTaken < actor->pathLength)
         {
             actor->commandInQueue = getSectorDir(actor->gameObject.entity.pos, actor->path[actor->pathLength - 1 - actor->pathStepsTaken]);
@@ -1129,20 +1105,27 @@ void updateGame()
         {
             actor->clearPath();
         }
+        currentActorNode = currentActorNode->next;
     }
     static bool viewMemory = false;
-    if (jadel::inputIsKeyTyped(jadel::KEY_Q))
+    if (isButtonState(currentGame->button1id, BUTTON_STATE_RELEASED, currentGame->testBox))
         viewMemory = !viewMemory;
     if (viewMemory)
     {
-        submitText(jadel::Vec2(-15.5f, 7.0f), 3, &currentGame->font, &uiLayer, "Total Memory Allocation in bytes: %d", jadel::memoryGetTotalAllocationSize());
-        submitText(jadel::Vec2(-15.5f, 6.5f), 3, &currentGame->font, &uiLayer, "Reserved blocks: %d", jadel::memoryGetNumAllocatedBlocks());
-        submitText(jadel::Vec2(-15.5f, 6.0f), 3, &currentGame->font, &uiLayer, "Reserved bytes: %d", jadel::memoryGetNumAllocatedBytes());
-        submitText(jadel::Vec2(-15.5f, 5.5f), 3, &currentGame->font, &uiLayer, "Available bytes: %d", jadel::memoryGetFreeBytes());
+        renderer->submitText(jadel::Vec2(-15.5f, 7.0f), 3, g_currentFont, currentGame->uiLayer, "Total Memory Allocation in bytes: %d", jadel::memoryGetTotalAllocationSize());
+        renderer->submitText(jadel::Vec2(-15.5f, 6.5f), 3, g_currentFont, currentGame->uiLayer, "Reserved blocks: %d", jadel::memoryGetNumAllocatedBlocks());
+        renderer->submitText(jadel::Vec2(-15.5f, 6.0f), 3, g_currentFont, currentGame->uiLayer, "Reserved bytes: %d", jadel::memoryGetNumAllocatedBytes());
+        renderer->submitText(jadel::Vec2(-15.5f, 5.5f), 3, g_currentFont, currentGame->uiLayer, "Available bytes: %d", jadel::memoryGetFreeBytes());
     }
-    currentGame->screenPos ={
+    jadel::Point2i nextScreenPos =
+        {
             .x = currentGame->player.gameObject.entity.pos.x - screenTilemapW / 2,
             .y = currentGame->player.gameObject.entity.pos.y - screenTilemapH / 2};
-    currentGame->updateGame = false;
-    render();
+    if (currentGame->updateCamera)
+    {
+        currentGame->screenPos = nextScreenPos;
+    }
+ 
+    renderGame();
+    renderer->render();
 }

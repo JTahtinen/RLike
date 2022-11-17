@@ -1,6 +1,7 @@
 #include "world.h"
 #include "game.h"
 #include "actor.h"
+#include "globals.h"
 
 bool inBounds(int x, int y, const World *world)
 {
@@ -9,20 +10,34 @@ bool inBounds(int x, int y, const World *world)
     return result;
 }
 
+int distanceBetweenSectors(const Sector *a, const Sector *b)
+{
+    jadel::Point2i posA = a->pos;
+    jadel::Point2i posB = b->pos;
+
+    if (posA.x == posB.x && posA.y == posB.y)
+        return 0;
+
+    int xDiff = jadel::absInt(posB.x - posA.x);
+    int yDiff = jadel::absInt(posB.y - posA.y);
+
+    int higherDiff = xDiff > yDiff ? xDiff : yDiff;
+    int lowerDiff = xDiff > yDiff ? yDiff : xDiff;
+
+    int result = lowerDiff * 14 + (higherDiff - lowerDiff) * 10;
+    return result;
+}
+
 void pushGameObject(GameObject gameObject, World *world)
 {
-    if (currentGame->numGameObjects < MAX_GAMEOBJECTS)
+    GameObject *reservedGameObject = currentGame->gameObjectFactory.get();
+    if (!reservedGameObject)
     {
-        uint32 index = currentGame->numGameObjects++;
-        currentGame->gameObjects[index] = gameObject;
-
-        if (world->gameObjects.size < MAX_GAMEOBJECTS)
-        {
-            GameObject *gameObject = &currentGame->gameObjects[index];
-            world->gameObjects.push(gameObject);
-            // world->gameObjects[world->numGameObjects++] = &currentGame->gameObjects[index];
-        }
+        return;
     }
+    *reservedGameObject = gameObject;
+
+    world->gameObjects.append(reservedGameObject);
 }
 
 void pushGameObject(int x, int y, AnimFrames frames, const char *name, World *world)
@@ -32,32 +47,37 @@ void pushGameObject(int x, int y, AnimFrames frames, const char *name, World *wo
 
 void pushItem(Item item, World *world)
 {
-    if (currentGame->numItems < MAX_GAMEOBJECTS)
+    if (!world)
     {
-        uint32 index = currentGame->numItems++;
-        currentGame->items[index] = item;
-
-        if (world->items.size < MAX_GAMEOBJECTS)
-        {
-            Item *item = &currentGame->items[index];
-            world->items.push(item);
-        }
+        return;
     }
+    Item *reservedItem = currentGame->itemFactory.get();
+    if (!reservedItem)
+    {
+        return;
+    }
+    *reservedItem = item;
+
+    // world->items.append(reservedItem);
+    /*if (reservedItem->flags & ITEM_EFFECT_ILLUMINATE)
+    {
+        world->lights.append(reservedItem);
+    }*/
+    jadel::Point2i itemPos = item.gameObject.entity.pos;
+    Sector *targetSector = getSectorFromPos(itemPos, world);
+    addSectorItem(targetSector, reservedItem, world);
 }
 
 void pushActor(Actor actor, World *world)
 {
-    if (currentGame->numActors < MAX_ACTORS)
+    Actor *reservedActor = currentGame->actorFactory.get();
+    if (!reservedActor)
     {
-        uint32 index = currentGame->numActors++;
-        currentGame->actors[index] = actor;
-
-        if (world->actors.size < MAX_ACTORS)
-        {
-            Actor *actor = &currentGame->actors[index];
-            world->actors.push(actor);
-        }
+        return;
     }
+    *reservedActor = actor;
+
+    world->actors.append(reservedActor);
 }
 
 void pushActor(int x, int y, AnimFrames frames, const char *name, World *world)
@@ -93,6 +113,39 @@ Sector *getSectorFromPos(jadel::Point2i pos)
     return result;
 }
 
+void calculateLights(World *world)
+{
+    jadel::Node<Item *> *currentLightNode = world->lights.head;
+    for (int i = 0; i < world->width * world->height; ++i)
+    {
+        Sector *sector = &world->sectors[i];
+        sector->illumination = 0;
+    }
+    while (currentLightNode)
+    {
+        Item *item = currentLightNode->data;
+        float lightIntensity = item->illumination;
+        Sector *currentSector = getSectorFromPos(item->gameObject.entity.pos, world);
+        for (int i = 0; i < world->width * world->height; ++i)
+        {
+            Sector *illuminateSector = &world->sectors[i];
+            jadel::Point2i sectorPos = illuminateSector->pos;
+            int dist;
+            if (illuminateSector == currentSector)
+            {
+                dist = item->distanceFromGround;
+            }
+            else
+            {
+                dist = distanceBetweenSectors(currentSector, illuminateSector) / 3;
+                dist = (int)sqrtf((float)dist * (float)dist + (float)item->distanceFromGround * (float)item->distanceFromGround);
+            }
+            illuminateSector->illumination += (lightIntensity / (float)(dist * dist));
+        }
+        currentLightNode = currentLightNode->next;
+    }
+}
+
 bool setPortal(int x0, int y0, uint32 world0ID, int x1, int y1, uint32 world1ID)
 {
     World *world0 = getWorldByID(world0ID);
@@ -106,13 +159,13 @@ bool setPortal(int x0, int y0, uint32 world0ID, int x1, int y1, uint32 world1ID)
     Sector *sector1 = getSectorFromPos(x1, y1, world1);
 
     world0->portals[world0->numPortals] = {
-        .sprite = currentGame->assets.getSurface("res/portal.png"),
+        .sprite = g_Assets.getSurface("res/portal.png"),
         .linkID = numPortalIDs,
         .worldLinkID = world1ID,
         .sector = sector0};
 
     world1->portals[world1->numPortals] = {
-        .sprite = currentGame->assets.getSurface("res/portal.png"),
+        .sprite = g_Assets.getSurface("res/portal.png"),
         .linkID = numPortalIDs,
         .worldLinkID = world0ID,
         .sector = sector1};
@@ -123,15 +176,70 @@ bool setPortal(int x0, int y0, uint32 world0ID, int x1, int y1, uint32 world1ID)
     return true;
 }
 
+void addSectorItem(Sector* sector, Item *item, World *world)
+{
+    if (!sector || !item || !world)
+    {
+        return;
+    }
+    sector->items.append(item);
+    // TODO: Something else
+    world->items.append(item);
+    item->gameObject.entity.pos = sector->pos;
+    ++sector->numItems;
+    if (item->flags & ITEM_EFFECT_ILLUMINATE)
+    {
+        world->lights.append(item);
+        calculateLights(world);
+        currentGame->updateCamera = true;
+    }
+}
+
+void addSectorItem(int x, int y, Item *item, World *world)
+{
+    addSectorItem(getSectorFromPos(x, y, world), item, world);
+}
+
+void removeSectorItem(Sector* sector, Item *item, World *world)
+{
+    if (!sector || !item || !world)
+    {
+        return;
+    }
+    sector->items.deleteWithValue(item);
+    world->items.deleteWithValue(item);
+    --sector->numItems;
+    if (item->flags & ITEM_EFFECT_ILLUMINATE)
+    {
+        world->lights.deleteWithValue(item);
+        calculateLights(world);
+    }
+}
+
+void removeSectorItem(int x, int y, Item *item, World *world)
+{
+    removeSectorItem(getSectorFromPos(x, y, world), item, world);
+}
+
+void initSector(int x, int y, const Tile *tile, Sector *target)
+{
+    target->pos = {x, y};
+    target->numItems = 0;
+    target->tile = tile;
+    target->occupant = NULL;
+    target->items.head = NULL;
+    target->portal = NULL;
+    target->illumination = 0.0f;
+}
+
 bool initWorld(int width, int height, World *world)
 {
     if (!world)
         return false;
-
-    jadel::vectorInit<Actor *>(MAX_ACTORS, &world->actors);
-    jadel::vectorInit<Item *>(MAX_GAMEOBJECTS, &world->items);
-    jadel::vectorInit<GameObject *>(MAX_GAMEOBJECTS, &world->gameObjects);
-
+    world->actors.head = NULL;
+    world->items.head = NULL;
+    world->gameObjects.head = NULL;
+    world->lights.head = NULL;
     world->entity = createEntity(0, 0);
     world->width = width;
     world->height = height;
@@ -141,28 +249,21 @@ bool initWorld(int width, int height, World *world)
     world->numCalculatedPathNodes = 0;
     world->calculatedPathNodes = (AStarNode **)malloc(width * height * sizeof(AStarNode *));
     currentGame->currentWorld = world;
-    jadel::graphicsCreateSurface(width * currentGame->tileScreenW, height * currentGame->tileScreenH, &world->worldSurface);
-    jadel::graphicsPushTargetSurface(&world->worldSurface);
     for (int y = 0; y < height; ++y)
     {
         for (int x = 0; x < width; ++x)
         {
             Sector *currentSector = &world->sectors[x + y * width];
-          //  if (x % 3 == 0 && y % 3 == 0)
-          //      initSector(x, y, &currentGame->wallTile, currentSector);
-          //  else
-                initSector(x, y, &currentGame->walkTile, currentSector);
+            //  if (x % 3 == 0 && y % 3 == 0)
+            //      initSector(x, y, &currentGame->wallTile, currentSector);
+            //  else
+            initSector(x, y, &currentGame->walkTile, currentSector);
             AStarNode *node = &world->pathNodes[x + y * width];
             node->pos = {x, y};
             node->sector = getSectorFromPos(x, y);
             const jadel::Surface *sectorSprite = currentSector->tile->surface;
-            jadel::Recti sectorPos = getSectorScreenPos(x, y);
-
-            jadel::graphicsBlit(sectorSprite, sectorPos);
         }
     }
-
-    jadel::graphicsPopTargetSurface();
 
     return true;
 }

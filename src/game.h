@@ -7,6 +7,7 @@
 #include "actor.h"
 #include "timer.h"
 #include "font.h"
+#include "render.h"
 #include <string>
 #include <vector>
 #include "dialogbox.h"
@@ -64,28 +65,16 @@ enum
     SUBSTATE_COUNT
 };
 
-struct AssetCollection
-{
-    //jadel::Vector<jadel::Surface> surfaces;
-    //jadel::Vector<jadel::String> names;
-
-    std::vector<jadel::Surface> surfaces;
-    std::vector<std::string> names;
-    
-    jadel::Surface* getSurface(const char* name);
-    void pushSurface(jadel::Surface surface, const char* name);
-    bool loadSurface(const char* filepath);
-};
 
 struct Game
 {
-    Actor* actors;
-    uint32 numActors = 0;
-    GameObject* gameObjects;
-    uint32 numGameObjects = 0;
-    Item* items;
-    uint32 numItems = 0;
-    
+    jadel::Factory<Actor> actorFactory;
+    jadel::Factory<GameObject> gameObjectFactory;
+    jadel::Factory<Item> itemFactory;
+    Renderer gameRenderer;
+    uint32 gameLayer;
+    uint32 uiLayer;
+
     uint32 commandQueue[10];
     uint32 numCommands = 0;
     World* worlds;
@@ -94,7 +83,7 @@ struct Game
     uint32 currentState;
     jadel::Point2i screenPos = {.x = 0, .y = 0};
     Actor player;
-    
+
     int tileScreenW;
     int tileScreenH;
     Tile walkTile;
@@ -106,12 +95,12 @@ struct Game
     bool playerCanMove;
     size_t moveTimerMillis;
     size_t spriteTimerMillis;
-    bool updateGame = true;
+    bool updateCamera;
 
-    DialogBox testBox;
-
-    Font font;
-    AssetCollection assets;  
+    DialogBox* testBox;
+    uint32 button1id;
+    uint32 button2id;
+    uint32 button3id;
 };
 
 jadel::Recti getSectorScreenPos(int x, int y);
@@ -122,7 +111,7 @@ jadel::Recti getSectorScreenPos(const Sector* sector);
 
 void addSectorItem(Sector* sector, Item* item);
 
-void initSector(int x, int y, const Tile *tile, Sector *target);
+void removeSectorItem(Sector *sector, Item *item);
 
 Sector* getSectorFromPos(int x, int y);
 
@@ -147,8 +136,6 @@ Item createItem(int x, int y, AnimFrames frames, const char *name, uint32 flags)
 Item createHealthItem(int x, int y, AnimFrames frames, const char *name, int healthModifier);
 
 Item createIlluminatorItem(int x, int y, AnimFrames frames, const char *name, float illumination);
-
-bool load_PNG(const char *filename, jadel::Surface *target);
 
 void setGame(Game* game);
 
