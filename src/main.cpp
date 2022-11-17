@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "game.h"
+#include "application.h"
 //#include "file.h"
 #include <thread>
 #include "timer.h"
@@ -13,7 +13,7 @@ static int windowHeight = 720;
 
 int JadelMain()
 {
-    if (!JadelInit())
+    if (!JadelInit(MB(500)))
     {
         jadel::message("Jadel init failed!\n");
         return 0;
@@ -25,13 +25,12 @@ int JadelMain()
     jadel::Surface winSurface;
     jadel::graphicsCreateSurface(windowWidth, windowHeight, &winSurface);
     uint32* winPixels = (uint32*)winSurface.pixels;
-    jadel::memoryInit(MB(500));
-    Game game;
-    setGame(&game);
-    if (!initGame(&window))
+
+    Application app;
+    if (!app.init(&window))
     {
-        jadel::message("Game init failed!\n");
-        exit(0);
+        jadel::message("Application init failed\n");
+        return 0;
     }
     Timer frameTimer;
     frameTimer.start();
@@ -40,8 +39,8 @@ int JadelMain()
     while (true)
     {
         JadelUpdate();
-        updateGame();
-        jadel::windowUpdate(&window, getScreenBuffer());
+        app.update();
+        jadel::windowUpdate(&window, app.getScreenBuffer());
         
         elapsedInMillis = frameTimer.getMillisSinceLastUpdate();
         if (elapsedInMillis < minFrameTime)
