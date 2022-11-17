@@ -2,6 +2,7 @@
 #include "math.h"
 #include "render.h"
 #include "game.h"
+#include "globals.h"
 #include <jadel.h>
 
 static jadel::Vec2 mouseScreenPos(0, 0);
@@ -10,21 +11,21 @@ static jadel::Vec2 mouseScreenPos(0, 0);
 
 static jadel::Vec2 initiallyClickedPoint(0, 0);
 
-jadel::Rectf getPosOfButton(int index, const DialogBox *box)
+jadel::Rectf getRelativePosOfButton(int index, const DialogBox *box)
 {
     jadel::Rectf result;
-
-    // TODO: Clean up magic numbers
 
     float startX;
     float startY;
     float endX;
     float endY;
 
-    endY = box->dimensions.y - (index * 0.6f) - 0.2f;
-    startY = endY - 0.6f;
-    startX = 0.2f;
-    endX = box->dimensions.x - 0.2f;
+    static float margin = 0.2f;
+    static float buttonHeight = 0.8f;
+    endY = box->dimensions.y - (index * buttonHeight) - margin;
+    startY = endY - buttonHeight + margin;
+    startX = margin;
+    endX = box->dimensions.x - margin;
     result = {startX, startY, endX, endY};
     return result;
 }
@@ -32,7 +33,7 @@ jadel::Rectf getPosOfButton(int index, const DialogBox *box)
 jadel::Rectf getScreenPosOfButton(int index, const DialogBox *box)
 {
     jadel::Rectf result;
-    jadel::Rectf relPos = getPosOfButton(index, box);
+    jadel::Rectf relPos = getRelativePosOfButton(index, box);
     jadel::Vec2 boxPos = box->screenObject.pos;
     result = {boxPos.x + relPos.x0, boxPos.y + relPos.y0, boxPos.x + relPos.x1, boxPos.y + relPos.y1};
     return result;
@@ -134,7 +135,7 @@ void dialogBoxUpdate(DialogBox *box)
     }
 }
 
-void dialogBoxRender(DialogBox *box, RenderLayer *layer)
+void dialogBoxRender(DialogBox *box, uint32 layer, Renderer* renderer)
 {
     if (!layer)
         return;
@@ -145,15 +146,15 @@ void dialogBoxRender(DialogBox *box, RenderLayer *layer)
     if (box->contentFlags && DIALOG_BOX_HEADER)
     {
         screenObjectPushRect(jadel::Vec2(0, box->dimensions.y), jadel::Vec2(box->dimensions.x, box->headerHeight), box->headerCurrentColor, scrObj);
-        static jadel::Vec2 headerTextSize = getTextScreenSize(box->headerString.c_str(), 2.5f, &currentGame->font);
-        submitText(jadel::Vec2((box->dimensions.x * 0.5f) - (headerTextSize.x * 0.5f), box->dimensions.y + 0.03f), 2.5f,
-                   &currentGame->font, scrObj, box->headerString.c_str());
+        static jadel::Vec2 headerTextSize = getTextScreenSize(box->headerString.c_str(), 2.5f, g_currentFont);
+        renderer->submitText(jadel::Vec2((box->dimensions.x * 0.5f) - (headerTextSize.x * 0.5f), box->dimensions.y + 0.03f), 2.5f,
+                   g_currentFont, scrObj, box->headerString.c_str());
     }
 
     for (int i = 0; i < box->buttons.size; ++i)
     {
         const Button *button = &box->buttons[i];
-        jadel::Rectf buttonScreenArea = getPosOfButton(i, box);
+        jadel::Rectf buttonScreenArea = getRelativePosOfButton(i, box);
         jadel::Vec2 buttonStart = jadel::Vec2(buttonScreenArea.x0, buttonScreenArea.y0);
         jadel::Vec2 buttonDim = jadel::Vec2(buttonScreenArea.x1, buttonScreenArea.y1) - buttonStart;
         if (button->contentFlags & BUTTON_GRAPHICS_IMAGE)
@@ -170,12 +171,18 @@ void dialogBoxRender(DialogBox *box, RenderLayer *layer)
         }
         if (button->contentFlags & BUTTON_GRAPHICS_TEXT)
         {
-            jadel::Vec2 textScreenSize = getTextScreenSize(button->text.c_str(), 3.2f, &currentGame->font);
+            jadel::Vec2 textScreenSize = getTextScreenSize(button->text.c_str(), 3.2f, g_currentFont);
             jadel::Vec2 textPos(box->dimensions.x * 0.5f - textScreenSize.x * 0.5f, buttonStart.y + 0.16f);
-            submitText(textPos, 3.2f, &currentGame->font, scrObj, button->text.c_str());
+            renderer->submitText(textPos, 3.2f, g_currentFont, scrObj, button->text.c_str());
         }
     }
-    submitRenderable(scrObj, layer);
+    renderer->submitRenderable(scrObj, layer);
+}
+
+void dialogBoxRender(DialogBox* box, uint32 layer)
+{
+    // TODO: Remove
+    dialogBoxRender(box, layer, &currentGame->gameRenderer);
 }
 
 bool dialogBoxInit(DialogBox *target, jadel::Vec2 pos, jadel::Vec2 dimensions, const char *name,

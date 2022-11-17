@@ -2,6 +2,7 @@
 #include "game.h"
 #include "render.h"
 #include "math.h"
+#include "globals.h"
 
 static const jadel::Surface* inventorySurface;
 static jadel::Color idleHeaderColor = {0.6f, 0.2f, 0.3f, 0.8f};
@@ -13,7 +14,7 @@ static const float SpriteSize = 1.5f;
 
 bool systemInitInventory()
 {
-    inventorySurface = currentGame->assets.getSurface("res/inventory3.png");
+    inventorySurface = g_Assets.getSurface("res/inventory3.png");
     if (!inventorySurface)
         return false;
     return true;
@@ -103,6 +104,7 @@ void dropItemInSlot(ItemSlot *slot)
     Sector *currentSector = getSectorOfActor(&currentGame->player);
     addSectorItem(currentSector, slot->item);
     jadel::message("Dropped %s\n", slot->item->gameObject.entity.name.c_str());
+    currentGame->updateCamera = true;
     printInventory(&currentGame->player.inventory);
 }
 
@@ -187,7 +189,7 @@ void updateSubstateInventory(Inventory *inventory)
     {
        closeInventory(&currentGame->player.inventory);
     }
-    if (jadel::inputIsKeyTyped(jadel::KEY_I))
+    if (jadel::inputIsKeyTyped(jadel::KEY_TAB))
     {
         closeInventory(&currentGame->player.inventory);
         return;
@@ -268,6 +270,7 @@ InventoryRenderable createInventoryRenderable(jadel::Vec2 pos, jadel::Vec2 dimen
 
 void renderInventory(Inventory *inventory)
 {
+    Renderer* renderer = &currentGame->gameRenderer;
     InventoryRenderable *renderable = &inventory->renderable;
     ScreenObject *scrObj = &renderable->screenObject;
     screenObjectClear(scrObj);
@@ -300,14 +303,14 @@ void renderInventory(Inventory *inventory)
             renderable->elapsedTimeMS = 0;
             renderable->inventoryOpened = true;
         }
-        submitRenderable(scrObj, &uiLayer);
+        renderer->submitRenderable(scrObj, currentGame->uiLayer);
         return;
     }
     screenObjectPushScreenSurface(jadel::Vec2(0, 0), renderable->mainDimensions, inventorySurface, scrObj);
     screenObjectPushRect(jadel::Vec2(0, renderable->mainDimensions.y), jadel::Vec2(renderable->mainDimensions.x, 0.4f), renderable->headerColor, scrObj);
     
-    static jadel::Vec2 headerTextSize = getTextScreenSize("INVENTORY", 2.5f, &currentGame->font);
-    submitText(jadel::Vec2((renderable->mainDimensions.x * 0.5f) - (headerTextSize.x * 0.5f), renderable->mainDimensions.y + 0.03f), 2.5f, &currentGame->font, scrObj, "INVENTORY");
+    static jadel::Vec2 headerTextSize = getTextScreenSize("INVENTORY", 2.5f, g_currentFont);
+    renderer->submitText(jadel::Vec2((renderable->mainDimensions.x * 0.5f) - (headerTextSize.x * 0.5f), renderable->mainDimensions.y + 0.03f), 2.5f, g_currentFont, scrObj, "INVENTORY");
     float itemY = -1.0f;
     int currentItemNumber = 1;
     for (int i = 0; i < 10; ++i)
@@ -335,9 +338,9 @@ void renderInventory(Inventory *inventory)
         if (sprite)
             screenObjectPushScreenSurface(itemPos, itemDim, sprite, scrObj);
 
-        submitText(itemPos + jadel::Vec2(SpriteSize + 0.4f, SpriteSize * 0.5f - 0.1f), 4, &currentGame->font, scrObj, (jadel::toString(currentItemNumber++) + ": " + item->gameObject.entity.name).c_str());
+        renderer->submitText(itemPos + jadel::Vec2(SpriteSize + 0.4f, SpriteSize * 0.5f - 0.1f), 4, g_currentFont, scrObj, (jadel::toString(currentItemNumber++) + ": " + item->gameObject.entity.name).c_str());
         itemY -= 1.2f;
     }
-    submitRenderable(scrObj, &uiLayer);
+    renderer->submitRenderable(scrObj, currentGame->uiLayer);
 
 }

@@ -16,7 +16,7 @@ enum DialogBoxFlags
     DIALOG_BOX_MOVABLE = 1 << 1
 };
 
-enum MyButtonState
+enum ButtonState
 {
     BUTTON_STATE_HOVERED,
     BUTTON_STATE_CLICKED,
@@ -65,7 +65,10 @@ struct DialogBox
 
 void dialogBoxUpdate(DialogBox* box);
 
-void dialogBoxRender(DialogBox* box, RenderLayer* layer);
+void dialogBoxRender(DialogBox* box, uint32 layer, Renderer* renderer);
+
+void dialogBoxRender(DialogBox* box, uint32 layer);
+
 
 bool dialogBoxInit(DialogBox* target, jadel::Vec2 pos, jadel::Vec2 dimensions, 
                     const char* name, const jadel::Surface* background, uint32 flags);
