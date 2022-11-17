@@ -6,10 +6,13 @@
 #include "screenobject.h"
 #include "font.h"
 #include <stdio.h>
+#include "globals.h"
 
 #define NUM_RENDERABLE_TYPES (2)
 #define MAX_RENDERABLES_PER_TYPE (250)
 #define SCREEN_OBJECT_POOL_SIZE (NUM_RENDERABLE_TYPES * MAX_RENDERABLES_PER_TYPE)
+
+#define MAX_LAYERS_PER_RENDERER (5)
 
 #define STRING_BUFFER_SIZE (500)
 
@@ -58,9 +61,7 @@
         *stringBufferPointer = '\0';                                                                  \
         va_end(ap);                                                                                   \
     }
-
-static void renderGameObjects();
-static void renderTiles();
+/*
 RenderLayer gameLayer;
 RenderLayer uiLayer;
 
@@ -79,6 +80,8 @@ static ScreenObject *screenObjectPool;
 static size_t numReservedScreenObjects = 0;
 
 static std::stack<jadel::Mat3> transformationStack;
+*/
+static uint32 freeLayerHandle = 1;
 
 static jadel::Mat3 identityMatrix(1.0f, 0, 0,
                                   0, 1.0f, 0,
@@ -88,56 +91,121 @@ static jadel::Mat3 viewMatrix(1.0f / 16.0f, 0.0f, 0.0f,
                               0.0f, 1.0f / 9.0f, 0.0f,
                               0.0f, 0.0f, 1.0f);
 
-void renderText(const char *text, jadel::Vec2 pos, float scale, const Font *font, ScreenObject *target);
-
-static void pushMatrix(jadel::Mat3 matrix)
+bool Renderer::init(RendererInfo info)
 {
-    jadel::Mat3 multipliedMatrix = matrix.mul(transformationStack.top());
-    transformationStack.emplace(multipliedMatrix);
-}
-
-static bool popMatrix()
-{
-    if (transformationStack.size() <= 1)
+    
+    if (!jadel::graphicsCreateSurface(info.workingBufferDimensions.x, info.workingBufferDimensions.y, &_workingBuffer))
         return false;
-    transformationStack.pop();
+
+    _layers = (RenderLayer*)jadel::memoryReserve(MAX_LAYERS_PER_RENDERER * sizeof(RenderLayer));
+    _layerHandles = (uint32*)jadel::memoryReserve(MAX_LAYERS_PER_RENDERER * sizeof(uint32));
+    _numLayers = 0;
+
+    for (int i = 0; i < MAX_LAYERS_PER_RENDERER; ++i)
+    {
+        jadel::vectorInit<ScreenObject*>(MAX_RENDERABLES_PER_TYPE, &_layers[i].screenObjects);
+        //_layers[i].screenObjects.reserve(MAX_RENDERABLES_PER_TYPE);
+    }
+    _transformationStack.init(50);
+    _transformationStack.push(identityMatrix);
+    _screenObjectPool = (ScreenObject *)jadel::memoryReserve(info.screenObjectPoolSize * sizeof(ScreenObject));
+    _screenObjectPoolSize = info.screenObjectPoolSize;
+    for (int i = 0; i < info.screenObjectPoolSize; ++i)
+    {
+        initScreenObject(&_screenObjectPool[i]);
+    }
+    _stringBuffer = (char *)jadel::memoryReserve(info.stringBufferSize);
+    _stringBufferSize = info.stringBufferSize;
+    //_gameLayer.screenObjects.reserve(MAX_RENDERABLES_PER_TYPE);
+   // _uiLayer.screenObjects.reserve(MAX_RENDERABLES_PER_TYPE);
+    jadel::graphicsPushTargetSurface(&_workingBuffer);
+    jadel::graphicsSetClearColor(0);
+    jadel::graphicsClearTargetSurface();
+    jadel::graphicsPopTargetSurface();
+
     return true;
 }
 
-ScreenObject *reserveScreenObject()
+RenderLayer* Renderer::getRenderLayer(uint32 layerHandle)
 {
-    if (numReservedScreenObjects == SCREEN_OBJECT_POOL_SIZE)
+    if (layerHandle == INVALID_RENDERLAYER_HANDLE)
+    {
         return NULL;
-    ScreenObject *result = &screenObjectPool[numReservedScreenObjects++];
+    }
+    for (int i = 0; i < _numLayers; ++i)
+    {
+        if (_layerHandles[i] == layerHandle)
+        {
+            return &_layers[i];
+        }
+    }
+    return NULL;
+}
+
+uint32 Renderer::createLayer()
+{
+    if (_numLayers == MAX_LAYERS_PER_RENDERER)
+    {
+        return INVALID_RENDERLAYER_HANDLE;
+    }
+    uint32 handle = freeLayerHandle++;
+    RenderLayer* layer = &_layers[_numLayers];
+    _layerHandles[_numLayers++] = handle;
+    return handle;
+}
+
+void Renderer::pushMatrix(jadel::Mat3 matrix)
+{
+    jadel::Mat3 multipliedMatrix = matrix.mul(_transformationStack.top());
+    _transformationStack.push(multipliedMatrix);
+}
+
+bool Renderer::popMatrix()
+{
+    if (_transformationStack.size() <= 1)
+        return false;
+    _transformationStack.pop();
+    return true;
+}
+
+ScreenObject *Renderer::reserveScreenObject()
+{
+    if (_numReservedScreenObjects == _screenObjectPoolSize)
+        return NULL;
+    ScreenObject *result = &_screenObjectPool[_numReservedScreenObjects++];
     screenObjectClear(result);
     return result;
 }
 
-bool submitText(jadel::Vec2 pos, float scale, const Font *font, ScreenObject *target, const char *content, ...)
+bool Renderer::submitText(jadel::Vec2 pos, float scale, const Font *font, ScreenObject *target, const char *content, ...)
 {
     if (!content || *content == '\0' || !font || !target)
         return false;
     size_t stringLength = strlen(content);
-    if (stringLength >= STRING_BUFFER_SIZE)
+    if (stringLength >= _stringBufferSize)
         return false;
-    FORMAT_SCREEN_STRING(stringBuffer, STRING_BUFFER_SIZE);
+    FORMAT_SCREEN_STRING(_stringBuffer, _stringBufferSize);
     //    snprintf(stringBuffer, STRING_BUFFER_SIZE, content);
-    renderText(stringBuffer, pos, scale, font, target);
+    renderText(_stringBuffer, pos, scale, font, target);
     return true;
 }
 
-bool submitText(jadel::Vec2 pos, float scale, const Font *font, RenderLayer *layer, const char *content, ...)
+bool Renderer::submitText(jadel::Vec2 pos, float scale, const Font *font, uint32 layerHandle, const char *content, ...)
 {
-    if (!content || *content == '\0' || !font || !layer)
+    if (!content || *content == '\0' || !font || layerHandle == INVALID_RENDERLAYER_HANDLE)
+    {
         return false;
+    }
     size_t stringLength = strlen(content);
-    if (stringLength >= STRING_BUFFER_SIZE)
+    if (stringLength >= _stringBufferSize)
+    {
         return false;
+    }
     ScreenObject *scrObj = reserveScreenObject();
     screenObjectSetPos(jadel::Vec2(0, 0), scrObj);
-    FORMAT_SCREEN_STRING(stringBuffer, STRING_BUFFER_SIZE);
-    renderText(stringBuffer, pos, scale, font, scrObj);
-    submitRenderable(scrObj, layer);
+    FORMAT_SCREEN_STRING(_stringBuffer, _stringBufferSize);
+    renderText(_stringBuffer, pos, scale, font, scrObj);
+    submitRenderable(scrObj, layerHandle);
     return true;
 }
 /*
@@ -153,7 +221,7 @@ bool submitText(const char *content, jadel::Vec2 pos, float scale, const Font *f
     return true;
 }
 
-bool submitText(const char *content, jadel::Vec2 pos, float scale, const Font *font, RenderLayer *layer)
+bool submitText(const char *content, jadel::Vec2 pos, float scale, const Font *font, uint32 layerHandle)
 {
     if (!layer)
         return false;
@@ -166,68 +234,79 @@ bool submitText(const char *content, jadel::Vec2 pos, float scale, const Font *f
 
 }*/
 
-void renderSurface(const jadel::Surface *surface, jadel::Vec2 start, jadel::Vec2 end, jadel::Rectf sourceRect)
+void Renderer::renderSurface(const jadel::Surface *surface, jadel::Vec2 start, jadel::Vec2 end, jadel::Rectf sourceRect)
 {
     if (!surface)
         return;
-    jadel::Mat3 matrix = transformationStack.top();
+    jadel::Mat3 matrix = _transformationStack.top();
     jadel::Vec2 screenStart = matrix.mul(start);
     jadel::Vec2 screenEnd = matrix.mul(end);
     jadel::graphicsBlitRelative(surface, jadel::Rectf{screenStart.x, screenStart.y, screenEnd.x, screenEnd.y}, sourceRect);
 }
 
-void renderSurface(const jadel::Surface *surface, jadel::Vec2 start, jadel::Vec2 end)
+void Renderer::renderSurface(const jadel::Surface *surface, jadel::Vec2 start, jadel::Vec2 end)
 {
     renderSurface(surface, start, end, jadel::Rectf(0, 0, 1.0f, 1.0f));
 }
 
-void renderRect(float a, float r, float g, float b, jadel::Vec2 start, jadel::Vec2 end)
+void Renderer::renderRect(float a, float r, float g, float b, jadel::Vec2 start, jadel::Vec2 end)
 {
-    jadel::Mat3 matrix = transformationStack.top();
+    jadel::Mat3 matrix = _transformationStack.top();
     jadel::Vec2 screenStart = matrix.mul(start);
     jadel::Vec2 screenEnd = matrix.mul(end);
     jadel::graphicsDrawRectRelative(jadel::Rectf{screenStart.x, screenStart.y, screenEnd.x, screenEnd.y},
                                     jadel::Color{a, r, g, b});
 }
 
-void renderRect(jadel::Color color, jadel::Vec2 start, jadel::Vec2 end)
+void Renderer::renderRect(jadel::Color color, jadel::Vec2 start, jadel::Vec2 end)
 {
     renderRect(color.a, color.r, color.g, color.b, start, end);
 }
 
-void submitRenderable(ScreenObject *scrObj, RenderLayer *layer)
+void Renderer::submitRenderable(ScreenObject *scrObj, uint32 layerHandle)
 {
-    layer->screenObjects.emplace_back(scrObj);
+    RenderLayer* layer = getRenderLayer(layerHandle);
+    if (!layer)
+    {
+        return;
+    }
+    layer->screenObjects.push(scrObj);
 }
 
-void submitRenderable(const jadel::Surface *surface, jadel::Vec2 pos, jadel::Vec2 dimensions, jadel::Rectf sourceRect, RenderLayer *layer)
+void Renderer::submitRenderable(const jadel::Surface *surface, jadel::Vec2 pos, jadel::Vec2 dimensions, jadel::Rectf sourceRect, uint32 layerHandle)
 {
     ScreenObject *scrObj = reserveScreenObject();
     screenObjectSetPos(pos, scrObj);
     ScreenSurface scrSurf = createScreenSurface(jadel::Vec2(0, 0), dimensions, sourceRect, surface);
     screenObjectPushScreenSurface(scrSurf, scrObj);
-    submitRenderable(scrObj, layer);
+    submitRenderable(scrObj, layerHandle);
 }
 
-void submitRenderable(const jadel::Surface *surface, jadel::Vec2 pos, jadel::Vec2 dimensions, RenderLayer *layer)
+void Renderer::submitRenderable(const jadel::Surface *surface, jadel::Vec2 pos, jadel::Vec2 dimensions, uint32 layerHandle)
 {
-    submitRenderable(surface, pos, dimensions, jadel::Rectf{0, 0, 1.0f, 1.0f}, layer);
+    submitRenderable(surface, pos, dimensions, jadel::Rectf{0, 0, 1.0f, 1.0f}, layerHandle);
 }
 
-void submitRenderable(const jadel::Color color, jadel::Vec2 pos, jadel::Vec2 dimensions, RenderLayer *layer)
+void Renderer::submitRenderable(const jadel::Color color, jadel::Vec2 pos, jadel::Vec2 dimensions, uint32 layerHandle)
 {
     ScreenObject *scrObj = reserveScreenObject();
     screenObjectSetPos(pos, scrObj);
     ScreenRect scrRect = createScreenRect(jadel::Vec2(0, 0), dimensions, color);
     screenObjectPushRect(scrRect, scrObj);
-    submitRenderable(scrObj, layer);
+    submitRenderable(scrObj, layerHandle);
 }
 
-void flushLayer(RenderLayer *layer)
+void Renderer::flushLayer(uint32 layerHandle)
 {
-    pushMatrix(viewMatrix);
-    for (ScreenObject *scrObj : layer->screenObjects)
+    RenderLayer* layer = getRenderLayer(layerHandle);
+    if (!layer)
     {
+        return;
+    }
+    pushMatrix(viewMatrix);
+    for (int i = 0; i < layer->screenObjects.size; ++i) 
+    {
+        ScreenObject *scrObj = layer->screenObjects[i];
         uint32 surfacesRendered = 0;
         uint32 rectsRendered = 0;
         for (int i = 0; i < scrObj->numElements; ++i)
@@ -254,16 +333,20 @@ void flushLayer(RenderLayer *layer)
     popMatrix();
 }
 
-void flush()
+void Renderer::flush()
 {
-    flushLayer(&gameLayer);
-    flushLayer(&uiLayer);
-    numReservedScreenObjects = 0;
+    for (int i = 0; i < _numLayers; ++i)
+    {
+        flushLayer(_layerHandles[i]);
+    }
+    //flushLayer(&_gameLayer);
+    //flushLayer(&_uiLayer);
+    _numReservedScreenObjects = 0;
 }
 
 bool systemInitRender(jadel::Window *window)
 {
-    if (!jadel::graphicsCreateSurface(window->width, window->height, &workingBuffer))
+    /*if (!jadel::graphicsCreateSurface(window->width, window->height, &workingBuffer))
         return false;
     if (!jadel::graphicsCreateSurface(window->width, window->height, &worldBuffer))
         return false;
@@ -283,161 +366,11 @@ bool systemInitRender(jadel::Window *window)
     jadel::graphicsSetClearColor(0);
     jadel::graphicsClearTargetSurface();
     jadel::graphicsPopTargetSurface();
-
+*/
     return true;
 }
 
-static jadel::Recti getSectorDimensions(int x, int y)
-{
-    jadel::Recti sectorPos = getSectorScreenPos(x, y);
-    jadel::Recti result = {.x0 = sectorPos.x0,
-                           .y0 = sectorPos.y0,
-                           .x1 = sectorPos.x0 + currentGame->tileScreenW,
-                           .y1 = sectorPos.y0 + currentGame->tileScreenH};
-    return result;
-}
-
-static void renderBars()
-{
-    for (int y = yStart; y < yEnd; ++y)
-    {
-        for (int x = xStart; x < xEnd; ++x)
-        {
-            jadel::Recti entityDim = getSectorDimensions(x, y);
-            entityDim.x1 = entityDim.x1 - entityDim.x0;
-            entityDim.y1 = entityDim.y1 - entityDim.y0;
-            Sector currentSector = currentGame->currentWorld->sectors[x + y * currentGame->currentWorld->width];
-            if (!currentSector.occupant)
-                continue;
-            int health = currentSector.occupant->gameObject.health;
-            int maxHealth = currentSector.occupant->gameObject.maxHealth;
-            jadel::Recti healthBarDim{entityDim.x0, entityDim.y0 + entityDim.y1 + 10 - 10, entityDim.x1, 10};
-            jadel::Recti healthRemainingDim{healthBarDim.x0, healthBarDim.y0,
-                                            (int)((float)healthBarDim.x1 / (float)maxHealth * (float)health), healthBarDim.y1};
-            jadel::graphicsDrawRect(healthBarDim, 0xff222222);
-            jadel::graphicsDrawRect(healthRemainingDim, 0xffaa0000);
-        }
-    }
-}
-
-static void renderWorld()
-{
-    if (currentGame->updateCamera)
-    {
-        renderTiles();
-    }
-    jadel::graphicsCopyEqualSizeSurface(&worldBuffer);
-    renderGameObjects();
-}
-
-static void renderTiles()
-{
-    jadel::graphicsPushTargetSurface(&worldBuffer);
-    jadel::graphicsSetClearColor(0);
-    jadel::graphicsClearTargetSurface();
-    for (int y = yStart; y < yEnd; ++y)
-    {
-        for (int x = xStart; x < xEnd; ++x)
-        {
-            jadel::graphicsPushTargetSurface(&workingTileSurface);
-            jadel::Recti entityDim = getSectorDimensions(x, y);
-
-            Sector currentSector = currentGame->currentWorld->sectors[x + y * currentGame->currentWorld->width];
-
-            const jadel::Surface *sectorSprite = NULL;
-            if (currentSector.portal)
-            {
-                sectorSprite = currentGame->assets.getSurface("res/portal.png");
-            }
-            else
-            {
-                sectorSprite = currentSector.tile->surface;
-            }
-
-            if (sectorSprite)
-            {
-                jadel::graphicsCopyEqualSizeSurface(sectorSprite);
-            }
-            jadel::graphicsMultiplyPixelValues(currentSector.illumination);
-            jadel::graphicsPopTargetSurface();
-            jadel::graphicsBlit(&workingTileSurface, entityDim);
-        }
-    }
-    jadel::graphicsPopTargetSurface();
-}
-
-void renderGameObjects()
-{
-    for (int y = yStart; y < yEnd; ++y)
-    {
-        for (int x = xStart; x < xEnd; ++x)
-        {
-            jadel::graphicsPushTargetSurface(&workingTileSurface);
-            Sector currentSector = currentGame->currentWorld->sectors[x + y * currentGame->currentWorld->width];
-            jadel::Recti entityDim = getSectorDimensions(x, y);
-            const jadel::Surface *spriteToDraw = NULL;
-            /*if (currentSector.occupant && !currentSector.occupant->transit.inTransit)
-            {
-                AnimFrames* frames
-                    = &currentSector.occupant->gameObject.frames;
-                spriteToDraw = frames->sprites[frames->currentFrameIndex];
-            }*/
-            if (currentSector.occupant)
-            {
-                spriteToDraw = getCurrentFrame(currentSector.occupant);
-            }
-            else if (currentSector.numItems == 1)
-            {
-                spriteToDraw = getCurrentFrame(&currentSector.items[currentSector.numItems - 1]->gameObject);
-            }
-            else if (currentSector.numItems > 1)
-            {
-                spriteToDraw = currentGame->assets.getSurface("res/clutter.png");
-            }
-            if (spriteToDraw)
-            {
-                // jadel::graphicsBlit(spriteToDraw, {0, 0, 256, 256});
-                jadel::graphicsCopyEqualSizeSurface(spriteToDraw);
-            }
-            if (currentSector.occupant && currentSector.occupant->gameObject.affectedByLight)
-            {
-                jadel::graphicsMultiplyPixelValues(currentSector.illumination);
-            }
-
-            jadel::graphicsPopTargetSurface();
-            if (spriteToDraw)
-            {
-                jadel::graphicsBlit(&workingTileSurface, entityDim);
-            }
-            /*
-            for (int i = 0; i < currentGame->currentWorld->numActors; ++i)
-            {
-                Actor *actor = currentGame->currentWorld->actors[i];
-                if (actor->transit.inTransit)
-                {
-                    jadel::Recti startPos = getSectorScreenPos(actor->transit.startSector);
-                    jadel::Recti endPos = getSectorScreenPos(actor->transit.endSector);
-                    jadel::Point2i posDiff = {endPos.x - startPos.x, endPos.y - startPos.y};
-                    jadel::Recti currentPoint =
-                        {
-                            jadel::roundToInt((float)startPos.x + (float)posDiff.x * actor->transit.progress),
-                            jadel::roundToInt((float)startPos.y + (float)posDiff.y * actor->transit.progress),
-                            currentGame->tileScreenW,
-                            currentGame->tileScreenH};
-                    jadel::graphicsBlit(
-                        actor->gameObject.frames.sprites[actor->gameObject.frames.currentFrameIndex], currentPoint);
-                }
-            }*/
-        }
-        /*           for (int i = 0; i < actors[1]->pathLength; ++i)
-                    {
-                        jadel::Recti sectorPos = getSectorScreenPos(actors[1]->path[i]);
-                        jadel::graphicsDrawRect(sectorPos, 0x88550000);
-                    }*/
-    }
-}
-
-void renderText(const char *text, jadel::Vec2 pos, float scale, const Font *font, ScreenObject *target)
+void Renderer::renderText(const char *text, jadel::Vec2 pos, float scale, const Font *font, ScreenObject *target)
 {
     const jadel::Surface *atlas = &font->fontAtlas;
 
@@ -474,20 +407,20 @@ jadel::Vec2 getTextScreenSize(const char *text, float scale, const Font *font)
     return result;
 }
 
-void render()
+void Renderer::render()
 {
-    jadel::graphicsPushTargetSurface(&workingBuffer);
+    jadel::graphicsPushTargetSurface(&_workingBuffer);
     jadel::graphicsSetClearColor(0);
     jadel::graphicsClearTargetSurface();
 
-    if (currentGame->screenPos.x > -screenTilemapW && currentGame->screenPos.y > -screenTilemapH && currentGame->screenPos.x < currentGame->currentWorld->width && currentGame->screenPos.y < currentGame->currentWorld->height)
+   /* if (currentGame->screenPos.x > -screenTilemapW && currentGame->screenPos.y > -screenTilemapH && currentGame->screenPos.x < currentGame->currentWorld->width && currentGame->screenPos.y < currentGame->currentWorld->height)
     {
-        xStart = currentGame->screenPos.x < 0 ? 0 : currentGame->screenPos.x;
-        yStart = currentGame->screenPos.y < 0 ? 0 : currentGame->screenPos.y;
-        xEnd = currentGame->screenPos.x + screenTilemapW <= currentGame->currentWorld->width
+        _xStart = currentGame->screenPos.x < 0 ? 0 : currentGame->screenPos.x;
+        _yStart = currentGame->screenPos.y < 0 ? 0 : currentGame->screenPos.y;
+        _xEnd = currentGame->screenPos.x + screenTilemapW <= currentGame->currentWorld->width
                    ? (currentGame->screenPos.x + screenTilemapW)
                    : currentGame->currentWorld->width;
-        yEnd = currentGame->screenPos.y + screenTilemapH <= currentGame->currentWorld->height
+        _yEnd = currentGame->screenPos.y + screenTilemapH <= currentGame->currentWorld->height
                    ? (currentGame->screenPos.y + screenTilemapH)
                    : currentGame->currentWorld->height;
 
@@ -509,7 +442,7 @@ void render()
                 worldScreenDim.x1 = worldScreenEndDim.x0 - worldScreenDim.x0;
                 worldScreenDim.y1 = worldScreenEndDim.y0 - worldScreenDim.y0;
         */
-        renderWorld();
+ /*       renderWorld();
 
         renderBars();
         if (currentGame->player.equippedWeapon)
@@ -524,12 +457,12 @@ void render()
                                         {wScreenStart.x, wScreenStart.y, wScreenEnd.x, wScreenEnd.y});
         }
     }
-
+*/
     flush();
     jadel::graphicsPopTargetSurface();
 }
 
-jadel::Surface *getScreenBuffer()
+jadel::Surface* Renderer::getScreenBuffer()
 {
-    return &workingBuffer;
+    return &_workingBuffer;
 }
