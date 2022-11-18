@@ -119,12 +119,12 @@ void calculateLights(World *world)
     for (int i = 0; i < world->width * world->height; ++i)
     {
         Sector *sector = &world->sectors[i];
-        sector->illumination = 0;
+        sector->illumination = jadel::Vec3(0, 0, 0);
     }
     while (currentLightNode)
     {
         Item *item = currentLightNode->data;
-        float lightIntensity = item->illumination;
+        jadel::Vec3 lightIntensity = item->illumination;
         Sector *currentSector = getSectorFromPos(item->gameObject.entity.pos, world);
         for (int i = 0; i < world->width * world->height; ++i)
         {
@@ -140,7 +140,9 @@ void calculateLights(World *world)
                 dist = distanceBetweenSectors(currentSector, illuminateSector) / 3;
                 dist = (int)sqrtf((float)dist * (float)dist + (float)item->distanceFromGround * (float)item->distanceFromGround);
             }
-            illuminateSector->illumination += (lightIntensity / (float)(dist * dist));
+            float sectorIntensity = (float)(dist * dist);
+            jadel::Vec3 illumination(lightIntensity.x / sectorIntensity,lightIntensity.y / sectorIntensity,lightIntensity.z / sectorIntensity);
+            illuminateSector->illumination += illumination;
         }
         currentLightNode = currentLightNode->next;
     }
@@ -229,7 +231,7 @@ void initSector(int x, int y, const Tile *tile, Sector *target)
     target->occupant = NULL;
     target->items.head = NULL;
     target->portal = NULL;
-    target->illumination = 0.0f;
+    target->illumination = jadel::Vec3(0, 0 ,0);
 }
 
 bool initWorld(int width, int height, World *world)

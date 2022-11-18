@@ -26,7 +26,7 @@ struct Sector
     //Item* items[10];
     uint32 numItems;
     Portal* portal;
-    float illumination;
+    jadel::Vec3 illumination;
 };
 
 struct AStarNode

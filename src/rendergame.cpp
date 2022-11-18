@@ -121,7 +121,8 @@ void renderTiles()
             {
                 jadel::graphicsCopyEqualSizeSurface(sectorSprite);
             }
-            jadel::graphicsMultiplyPixelValues(currentSector.illumination);
+            jadel::Vec3 illumination = currentSector.illumination;
+            jadel::graphicsMultiplyPixelValues(illumination.x, illumination.y, illumination.z);
             jadel::graphicsPopTargetSurface();
             jadel::graphicsBlit(&_workingTileSurface, entityDim);
         }
@@ -165,7 +166,8 @@ void renderGameObjects()
             }
             if (currentSector.occupant && currentSector.occupant->gameObject.affectedByLight)
             {
-                jadel::graphicsMultiplyPixelValues(currentSector.illumination);
+                jadel::Vec3 illumination = currentSector.illumination;
+                jadel::graphicsMultiplyPixelValues(illumination.x, illumination.y, illumination.z);
             }
 
             jadel::graphicsPopTargetSurface();

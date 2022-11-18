@@ -664,9 +664,9 @@ bool initGame(jadel::Window *window)
     pushItem(createHealthItem(10, 4, &healthPackTemplate, 20), &currentGame->worlds[0]);
     pushItem(createHealthItem(9, 5, &healthPackTemplate, 20), &currentGame->worlds[0]);
     pushItem(createHealthItem(9, 4, poisonFrames, "Poison", -10), &currentGame->worlds[0]);
-    pushItem(createIlluminatorItem(6, 5, {0}, "Light", 150.0f), &currentGame->worlds[0]);
-    pushItem(createIlluminatorItem(18, 3, {0}, "Light", 150.0f), &currentGame->worlds[0]);
-    pushItem(createIlluminatorItem(3, 3, {0}, "Light", 150.0f), &currentGame->worlds[1]);
+    pushItem(createIlluminatorItem(6, 5, {0}, "Light", jadel::Vec3(150.0f, 4.0f, 126.0f)), &currentGame->worlds[0]);
+    pushItem(createIlluminatorItem(18, 3, {0}, "Light", jadel::Vec3(150.0f, 150.0f, 150.0f)), &currentGame->worlds[0]);
+    pushItem(createIlluminatorItem(3, 3, {0}, "Light", jadel::Vec3(25.0f, 25.0f, 150.0f)), &currentGame->worlds[1]);
     pushItem(createWeaponItem(7, 4, daggerFrames, "Dagger", 2, 6), &currentGame->worlds[0]);
     resetPathNodes(&currentGame->worlds[0]);
     resetPathNodes(&currentGame->worlds[1]);

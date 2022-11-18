@@ -14,6 +14,7 @@ GameObject createGameObject(int x, int y, AnimFrames frames, const char *name,  
     result.entity.name = name;
     result.alive = true;
     result.affectedByLight = true;
+    result.moved = true;
     return result;
 }
 

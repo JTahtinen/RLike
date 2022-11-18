@@ -1,5 +1,6 @@
 #pragma once
 #include "gameobject.h"
+#include <jadel.h>
 
 struct Actor;
 
@@ -25,7 +26,7 @@ struct Item
 
     int healthModifier;
 
-    float illumination;
+    jadel::Vec3 illumination;
     int distanceFromGround;
 
     DamageRange damage;
@@ -41,6 +42,6 @@ Item createHealthItem(int x, int y, AnimFrames frames, const char *name, int hea
 
 Item createHealthItem(int x, int y, const GameObjectTemplate* obj, int healthModifier);
 
-Item createIlluminatorItem(int x, int y, AnimFrames frames, const char *name, float illumination);
+Item createIlluminatorItem(int x, int y, AnimFrames frames, const char *name, jadel::Vec3 illumination);
 
 Item createWeaponItem(int x, int y, AnimFrames frames, const char* name, uint32 numDice, uint32 numFaces);

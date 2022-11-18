@@ -53,7 +53,7 @@ Item createHealthItem(int x, int y, const GameObjectTemplate* obj, int healthMod
     return item;
 }
 
-Item createIlluminatorItem(int x, int y, AnimFrames frames, const char *name, float illumination)
+Item createIlluminatorItem(int x, int y, AnimFrames frames, const char *name, jadel::Vec3 illumination)
 {
     Item item = createItem(x, y, frames, name, ITEM_EFFECT_ILLUMINATE);
     item.illumination = illumination;

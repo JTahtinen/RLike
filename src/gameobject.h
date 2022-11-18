@@ -25,6 +25,7 @@ struct GameObject
     int health;
     int maxHealth;
     bool affectedByLight;
+    bool moved;
 };
 
 GameObject createGameObject(int x, int y, AnimFrames frames, const char *name);
