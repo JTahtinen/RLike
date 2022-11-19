@@ -10,6 +10,7 @@
 #include "dice.h"
 #include "globals.h"
 #include <string>
+#include "util.h"
 
 Game *currentGame;
 uint32 numIDs = 1;
@@ -630,9 +631,14 @@ bool initGame(jadel::Window *window)
     currentGame->walkTile = {.surface = g_Assets.getSurface("res/grass.png"), .barrier = false};
     currentGame->wallTile = {.surface = g_Assets.getSurface("res/wall.png"), .barrier = true};
 
-    initWorld(20, 10, &currentGame->worlds[0]);
+    //initWorld(20, 10, &currentGame->worlds[0]);
+    
+    if (!loadWorld("res/testlevel.txt", &currentGame->worlds[0]))
+    {
+        return false;
+    }
     initWorld(8, 7, &currentGame->worlds[1]);
-
+    currentGame->currentWorld = &currentGame->worlds[0];
     currentGame->testBox = (DialogBox *)jadel::memoryReserve(sizeof(DialogBox));
 
     dialogBoxInit(currentGame->testBox, jadel::Vec2(12.0f, -9.0f), jadel::Vec2(4.0f, 3.0f), "Hello", g_Assets.getSurface("res/inventory3.png"), 0);
@@ -664,8 +670,8 @@ bool initGame(jadel::Window *window)
     pushItem(createHealthItem(10, 4, &healthPackTemplate, 20), &currentGame->worlds[0]);
     pushItem(createHealthItem(9, 5, &healthPackTemplate, 20), &currentGame->worlds[0]);
     pushItem(createHealthItem(9, 4, poisonFrames, "Poison", -10), &currentGame->worlds[0]);
-    pushItem(createIlluminatorItem(6, 5, {0}, "Light", jadel::Vec3(150.0f, 4.0f, 126.0f)), &currentGame->worlds[0]);
-    pushItem(createIlluminatorItem(18, 3, {0}, "Light", jadel::Vec3(150.0f, 150.0f, 150.0f)), &currentGame->worlds[0]);
+    pushItem(createIlluminatorItem(6, 5, {0}, "Light", jadel::Vec3(250.0f, 4.0f, 150.0f)), &currentGame->worlds[0]);
+    pushItem(createIlluminatorItem(18, 3, {0}, "Light", jadel::Vec3(250.0f, 250.0f, 0.0f)), &currentGame->worlds[0]);
     pushItem(createIlluminatorItem(3, 3, {0}, "Light", jadel::Vec3(25.0f, 25.0f, 150.0f)), &currentGame->worlds[1]);
     pushItem(createWeaponItem(7, 4, daggerFrames, "Dagger", 2, 6), &currentGame->worlds[0]);
     resetPathNodes(&currentGame->worlds[0]);
@@ -681,51 +687,17 @@ bool initGame(jadel::Window *window)
         currentGame->currentWorld = &currentGame->worlds[i];
         World *curWorld = currentGame->currentWorld;
 
-        jadel::Node<Actor *> *currentActorNode = curWorld->actors.head;
-        while (currentActorNode)
+        LinkedListIterator actorIterator(&curWorld->actors);
+        Actor** actor;
+        while (actor = actorIterator.getNext())
         {
-            jadel::Point2i actorPos = currentActorNode->data->gameObject.entity.pos;
-            setSectorOccupant(actorPos.x, actorPos.y, currentActorNode->data);
-            currentActorNode = currentActorNode->next;
+            jadel::Point2i actorPos = (*actor)->gameObject.entity.pos;
+            setSectorOccupant(actorPos.x, actorPos.y, *actor);
         }
         calculateLights(curWorld);
     }
     setPortal(2, 0, currentGame->worlds[0].entity.id, 3, 4, currentGame->worlds[1].entity.id);
-    /*
-        for (int w = 0; w < currentGame->numWorlds; ++w)
-        {
-            World *world0 = &currentGame->worlds[w];
-            for (int i = 0; i < world0->width * world0->height; ++i)
-            {
-                Sector *currentSector = &world0->sectors[i];
-                for (int itemI = 0; itemI < currentSector->numItems; ++itemI)
-                {
-                    Item *item = currentSector->items[itemI];
-                    if (item->flags & ITEM_EFFECT_ILLUMINATE)
-                    {
-                        float illumination = item->illumination;
-                        for (int j = 0; j < world0->width * world0->height; ++j)
-                        {
-                            Sector *illuminateSector = &world0->sectors[j];
-                            jadel::Point2i sectorPos = illuminateSector->pos;
-                            int dist;
-                            if (illuminateSector == currentSector)
-                            {
-                                dist = item->distanceFromGround;
-                            }
-                            else
-                            {
-                                dist = distanceBetweenSectors(currentSector, illuminateSector) / 3;
-                                dist = (int)sqrtf((float)dist * (float)dist + (float)item->distanceFromGround * (float)item->distanceFromGround);
-                            }
-                            illuminateSector->illumination += (illumination / (float)(dist * dist));
-                        }
-                    }
-                }
-            }*/
-
-    // currentGame->worlds[0].sectors[2].portal = &currentGame->worlds[0].portals[0];
-    // currentGame->worlds[1].sectors[3 + 4 * currentGame->worlds[1].width].portal = &currentGame->worlds[1].portals[0];
+    
     currentGame->currentWorld = &currentGame->worlds[0];
 
     currentGame->player.inventory.useMode = false;
@@ -796,10 +768,6 @@ void executeCommand(uint32 command, Actor *actor)
         moved = tryToMove(-14, -14, actor);
         break;
     }
-    }
-    jadel::Node<Item *> *lightNode = currentGame->worlds[0].lights.head;
-    if (jadel::inputIsKeyTyped(jadel::KEY_O))
-    {
     }
     if (actor->followingPath && moved)
     {
@@ -1078,21 +1046,23 @@ void updateGame()
     {
         currentGame->spriteTimerMillis %= 333;
         auto &items = currentGame->currentWorld->items;
-        jadel::Node<Item *> *currentItemNode = items.head;
-        while (currentItemNode)
+        LinkedListIterator itemIterator(&items);
+        Item** item;
+        while (item = itemIterator.getNext())
         {
-            setNextFrame(&currentItemNode->data->gameObject);
-            currentItemNode = currentItemNode->next;
+            setNextFrame(&(*item)->gameObject);
         }
     }
 
     dialogBoxRender(currentGame->testBox, currentGame->uiLayer, &currentGame->gameRenderer);
 
     auto actors = getActors();
-    jadel::Node<Actor *> *currentActorNode = actors.head;
-    while (currentActorNode)
+
+    LinkedListIterator actorIterator(&actors);
+    Actor** actorAddr;
+    while (actorAddr = actorIterator.getNext())
     {
-        Actor *actor = currentActorNode->data;
+        Actor *actor = *actorAddr;
         if (actor->followingPath && actor->pathStepsTaken < actor->pathLength)
         {
             actor->commandInQueue = getSectorDir(actor->gameObject.entity.pos, actor->path[actor->pathLength - 1 - actor->pathStepsTaken]);
@@ -1105,7 +1075,6 @@ void updateGame()
         {
             actor->clearPath();
         }
-        currentActorNode = currentActorNode->next;
     }
     static bool viewMemory = false;
     if (isButtonState(currentGame->button1id, BUTTON_STATE_RELEASED, currentGame->testBox))

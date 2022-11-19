@@ -46,6 +46,7 @@ struct World
     int width;
     int height;
     Sector* sectors;
+    jadel::Vector<Tile> tiles;
     jadel::LinkedList<GameObject*> gameObjects;
     jadel::LinkedList<Actor*> actors;
     jadel::LinkedList<Item*> items;
@@ -93,5 +94,8 @@ void calculateLights(World* world);
 
 bool setPortal(int x0, int y0, uint32 world0ID, int x1, int y1, uint32 world1ID);
 
+bool initWorld(int width, int height, Sector* sectoMap, const jadel::Vector<Tile>& tiles, World *world);
 
 bool initWorld(int width, int height, World *world);
+
+bool loadWorld(const char *filepath, World *target);

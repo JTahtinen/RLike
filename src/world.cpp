@@ -2,6 +2,8 @@
 #include "game.h"
 #include "actor.h"
 #include "globals.h"
+#include "util.h"
+#include <string.h>
 
 bool inBounds(int x, int y, const World *world)
 {
@@ -115,15 +117,16 @@ Sector *getSectorFromPos(jadel::Point2i pos)
 
 void calculateLights(World *world)
 {
-    jadel::Node<Item *> *currentLightNode = world->lights.head;
     for (int i = 0; i < world->width * world->height; ++i)
     {
         Sector *sector = &world->sectors[i];
         sector->illumination = jadel::Vec3(0, 0, 0);
     }
-    while (currentLightNode)
+    LinkedListIterator lightIterator(&world->lights);
+    Item **itemAddr;
+    while (itemAddr = lightIterator.getNext())
     {
-        Item *item = currentLightNode->data;
+        Item *item = *itemAddr;
         jadel::Vec3 lightIntensity = item->illumination;
         Sector *currentSector = getSectorFromPos(item->gameObject.entity.pos, world);
         for (int i = 0; i < world->width * world->height; ++i)
@@ -141,10 +144,9 @@ void calculateLights(World *world)
                 dist = (int)sqrtf((float)dist * (float)dist + (float)item->distanceFromGround * (float)item->distanceFromGround);
             }
             float sectorIntensity = (float)(dist * dist);
-            jadel::Vec3 illumination(lightIntensity.x / sectorIntensity,lightIntensity.y / sectorIntensity,lightIntensity.z / sectorIntensity);
+            jadel::Vec3 illumination(lightIntensity.x / sectorIntensity, lightIntensity.y / sectorIntensity, lightIntensity.z / sectorIntensity);
             illuminateSector->illumination += illumination;
         }
-        currentLightNode = currentLightNode->next;
     }
 }
 
@@ -178,7 +180,7 @@ bool setPortal(int x0, int y0, uint32 world0ID, int x1, int y1, uint32 world1ID)
     return true;
 }
 
-void addSectorItem(Sector* sector, Item *item, World *world)
+void addSectorItem(Sector *sector, Item *item, World *world)
 {
     if (!sector || !item || !world)
     {
@@ -202,7 +204,7 @@ void addSectorItem(int x, int y, Item *item, World *world)
     addSectorItem(getSectorFromPos(x, y, world), item, world);
 }
 
-void removeSectorItem(Sector* sector, Item *item, World *world)
+void removeSectorItem(Sector *sector, Item *item, World *world)
 {
     if (!sector || !item || !world)
     {
@@ -231,13 +233,14 @@ void initSector(int x, int y, const Tile *tile, Sector *target)
     target->occupant = NULL;
     target->items.head = NULL;
     target->portal = NULL;
-    target->illumination = jadel::Vec3(0, 0 ,0);
+    target->illumination = jadel::Vec3(0, 0, 0);
 }
 
-bool initWorld(int width, int height, World *world)
+bool initWorld(int width, int height, Sector *sectorMap, const jadel::Vector<Tile>& tiles, World *world)
 {
-    if (!world)
+    if (!world || !sectorMap)
         return false;
+    world->sectors = sectorMap;
     world->actors.head = NULL;
     world->items.head = NULL;
     world->gameObjects.head = NULL;
@@ -245,27 +248,204 @@ bool initWorld(int width, int height, World *world)
     world->entity = createEntity(0, 0);
     world->width = width;
     world->height = height;
-    world->sectors = (Sector *)malloc(width * height * sizeof(Sector));
+    world->tiles = tiles;
     world->numPortals = 0;
-    world->pathNodes = (AStarNode *)malloc(width * height * sizeof(AStarNode));
+    world->pathNodes = (AStarNode *)jadel::memoryReserve(width * height * sizeof(AStarNode));
     world->numCalculatedPathNodes = 0;
-    world->calculatedPathNodes = (AStarNode **)malloc(width * height * sizeof(AStarNode *));
+    world->calculatedPathNodes = (AStarNode **)jadel::memoryReserve(width * height * sizeof(AStarNode *));
     currentGame->currentWorld = world;
+
     for (int y = 0; y < height; ++y)
     {
         for (int x = 0; x < width; ++x)
         {
-            Sector *currentSector = &world->sectors[x + y * width];
-            //  if (x % 3 == 0 && y % 3 == 0)
-            //      initSector(x, y, &currentGame->wallTile, currentSector);
-            //  else
-            initSector(x, y, &currentGame->walkTile, currentSector);
             AStarNode *node = &world->pathNodes[x + y * width];
             node->pos = {x, y};
             node->sector = getSectorFromPos(x, y);
-            const jadel::Surface *sectorSprite = currentSector->tile->surface;
+        }
+    }
+    return true;
+}
+
+bool initWorld(int width, int height, World *world)
+{
+    Sector *sectors = (Sector *)jadel::memoryReserve(width * height * sizeof(Sector));
+    for (int y = 0; y < height; ++y)
+    {
+        for (int x = 0; x < width; ++x)
+        {
+            Sector *currentSector = &sectors[x + y * width];
+            // if (x % 4 == 0 && y % 4 == 0)
+            //     initSector(x, y, &currentGame->wallTile, currentSector);
+            //   else
+            initSector(x, y, &currentGame->walkTile, currentSector);
+
+        }
+    }
+    jadel::Vector<Tile> tiles;
+    jadel::vectorInit(10, &tiles);
+    bool result = initWorld(width, height, sectors, tiles, world);
+    if (!result)
+    {
+        jadel::memoryFree(sectors);
+        tiles.freeVector();
+    }
+    return result;
+}
+
+bool loadWorld(const char *filepath, World *target)
+{
+    char *file = NULL;
+    size_t numCharacters;
+    int width;
+    int height;
+    const char *errorMessage = "[ERROR] Trying to load world file";
+    if (!target)
+    {
+        jadel::message("%s%s: world pointer was null!\n", errorMessage, filepath);
+        return false;
+    }
+    int tileIDs[10];
+    jadel::Vector<Tile> tileTypes;
+    jadel::vectorInit(10, &tileTypes);
+    Sector *sectorMap;
+    int numTilesExpected = 0;
+    if (!jadel::readTextFileAndReserveMemory(filepath, &file, &numCharacters))
+    {
+        jadel::message("%s%s: file not found!\n", errorMessage, filepath);
+        return false;
+    }
+
+    char *token;
+    while (token = strtok_s(file, ": \n", &file))
+    {
+        if (strcmp(token, "width") == 0)
+        {
+            token = strtok_s(file, ": \n", &file);
+            width = atoi(token);
+            continue;
+        }
+        else if (strcmp(token, "height") == 0)
+        {
+            token = strtok_s(file, ": \n", &file);
+            height = atoi(token);
+            continue;
+        }
+        else if (strcmp(token, "tiles") == 0)
+        {
+            token = strtok_s(file, ": \n", &file);
+            if (strcmp(token, "count") == 0)
+            {
+                token = strtok_s(file, ": \n", &file);
+                int numTilesLoaded = 0;
+                numTilesExpected = atoi(token);
+                for (; numTilesLoaded < numTilesExpected; ++numTilesLoaded)
+                {
+                    bool surfaceFound = false;
+                    bool barrierFound = false;
+                    Tile tile;
+                    token = strtok_s(file, ": \n", &file);
+                    int id = atoi(token);
+                    if (id == 0)
+                    {
+                        jadel::message("%s%s: invalid tile ID\n", errorMessage, filepath);
+                        return false;
+                    }
+                    tileIDs[numTilesLoaded] = id;
+                    while (!surfaceFound || !barrierFound)
+                    {
+                        token = strtok_s(file, ": \n", &file);
+                        if (strcmp(token, "surface") == 0)
+                        {
+                            if (surfaceFound)
+                            {
+                                jadel::message("%s%s: duplicate surface in tile definition\n", errorMessage, filepath);
+                                return false;
+                            }
+                            token = strtok_s(file, ": \n", &file);
+                            tile.surface = g_Assets.getSurface(token);
+                            surfaceFound = true;
+                            continue;
+                        }
+                        else if (strcmp(token, "barrier") == 0)
+                        {
+                            if (barrierFound)
+                            {
+                                jadel::message("%s%s: duplicate barrier in tile definition\n", errorMessage, filepath);
+                                return false;
+                            }
+                            token = strtok_s(file, ": \n", &file);
+                            if (strcmp(token, "true") == 0 || strcmp(token, "1") == 0)
+                            {
+                                tile.barrier = true;
+                                barrierFound = true;
+                                continue;
+                            }
+                            else if (strcmp(token, "false") == 0 || strcmp(token, "0") == 0)
+                            {
+                                tile.barrier = false;
+                                barrierFound = true;
+                                continue;
+                            }
+                        }
+                    }
+                    tileTypes.push(tile);
+                }
+                if (numTilesLoaded != numTilesExpected)
+                {
+                    jadel::message("%s%s: expected %d tile types, received %d\n", errorMessage, filepath, numTilesExpected, numTilesLoaded);
+                    return false;
+                }
+            }
+        }
+        else if (strcmp(token, "map") == 0)
+        {
+            sectorMap = (Sector *)jadel::memoryReserve(width * height * sizeof(Sector));
+            if (!sectorMap)
+            {
+                jadel::message("%s%s: could not reserve memory for sector map!\n", errorMessage, filepath);
+                return false;
+            }
+
+            for (int y = 0; y < height; ++y)
+            {
+                token = strtok_s(file, ": \n", &file);
+                for (int x = 0; x < width; ++x)
+                {
+                    Tile* tileType;
+                    char idChar[2];
+                    idChar[0] = token[x];
+                    idChar[1] = '\0';
+                    int tileTypeID = atoi(idChar);
+                    if (tileTypeID != 0)
+                    {
+                        bool tileTypeFound = false;
+                        for (int j = 0; j < numTilesExpected; ++j)
+                        {
+                            if (tileIDs[j] == tileTypeID)
+                            {
+                                Sector sector;
+                                tileType = &tileTypes[j];
+                                if (tileTypes[j].surface == NULL) return false;
+                                tileTypeFound = true;
+                                initSector(x, y, tileType, &sector);
+                                sectorMap[x + y * width] = sector;
+                                break;
+                            }
+                        }
+                        if (!tileTypeFound)
+                        {
+                            jadel::message("%s%s: invalid tile ID in map!\n", errorMessage, filepath);
+                            jadel::memoryFree(sectorMap);
+                            tileTypes.freeVector();
+                            return false;
+                        }
+                    }
+                }
+            }
         }
     }
 
-    return true;
+    bool result = initWorld(width, height, sectorMap, tileTypes, target);
+    return result;
 }
