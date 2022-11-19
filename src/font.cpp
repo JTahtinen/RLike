@@ -29,7 +29,6 @@ bool Font::loadFont(const char *filepath)
     if (!jadel::readTextFileAndReserveMemory(filepath, &data, &numChars))
         return false;
     FontInfo *info = &this->info;
-    // char *token = strtok(data, "=");
     bool startfound = false;
     int fontElementsFound = 0;
     while (fontElementsFound < 5)
