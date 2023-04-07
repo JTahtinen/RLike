@@ -31,6 +31,9 @@ bool Application::init(jadel::Window *window)
     assets.loadSurface("res/portal.png");
     assets.loadSurface("res/dagger.png");
     assets.loadSurface("res/inventory3.png");
+    assets.loadSurface("res/villasukat.png");
+    assets.loadSurface("res/fire.png");
+    assets.loadSurface("res/fire2.png");
     assets.loadFont("res/fonts/arial.fnt");
     g_currentFont = assets.getFont("res/fonts/arial.fnt");
     appState = APP_STATE_MENU;

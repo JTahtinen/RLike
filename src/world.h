@@ -6,6 +6,7 @@ struct Tile
 {
     const jadel::Surface* surface;
     bool barrier;
+    bool flammable;
 };
 
 struct Portal
@@ -27,6 +28,10 @@ struct Sector
     uint32 numItems;
     Portal* portal;
     jadel::Vec3 illumination;
+    bool flammable;
+    float ignitionTreshold;
+    float temperature;
+    bool onFire;
 };
 
 struct AStarNode
@@ -89,6 +94,8 @@ Sector *getSectorFromPos(int x, int y);
 Sector *getSectorFromPos(jadel::Point2i pos, World *world);
 
 Sector *getSectorFromPos(jadel::Point2i pos);
+
+jadel::Vector<Sector*> getSurroudingSectors(int x, int y, World* world);
 
 void calculateLights(World* world);
 

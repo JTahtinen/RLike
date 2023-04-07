@@ -1,6 +1,7 @@
 #include "rendergame.h"
 #include <jadel.h>
 #include "globals.h"
+#include "timer.h"
 
 Renderer *gameRenderer = NULL;
 
@@ -23,6 +24,10 @@ static int _yStart;
 static int _xEnd;
 static int _yEnd;
 
+static Timer fireTimer;
+static size_t fireTimerInMillis;
+bool drawFireOne;
+
 static ScreenObject _worldScrObj;
 
 static jadel::Recti getSectorDimensions(int x, int y)
@@ -37,6 +42,13 @@ static jadel::Recti getSectorDimensions(int x, int y)
 
 void renderGame()
 {
+    fireTimerInMillis += fireTimer.getMillisSinceLastUpdate();
+    fireTimer.update();
+    if (fireTimerInMillis >= 500)
+    {
+        fireTimerInMillis %= 500;
+        drawFireOne = !drawFireOne;
+    }
     if (!gameRenderer)
         return;
     jadel::graphicsPushTargetSurface(&_workingBuffer);
@@ -67,6 +79,9 @@ bool systemInitRenderGame(jadel::Window *window, Renderer *renderer)
         return false;
     gameRenderer = renderer;
     // initScreenObject(&_worldScrObj)
+    fireTimer.start();
+    drawFireOne = true;
+    fireTimerInMillis = 0;
     return true;
 }
 
@@ -82,10 +97,10 @@ void renderWorld()
         _yEnd = currentGame->screenPos.y + screenTilemapH <= currentGame->currentWorld->height
                     ? (currentGame->screenPos.y + screenTilemapH)
                     : currentGame->currentWorld->height;
-        if (currentGame->updateCamera)
-        {
+        //if (currentGame->updateCamera)
+        //{
             renderTiles();
-        }
+        //}
         jadel::graphicsCopyEqualSizeSurface(&_worldBuffer);
         renderGameObjects();
         renderBars();
@@ -121,10 +136,19 @@ void renderTiles()
             {
                 jadel::graphicsCopyEqualSizeSurface(sectorSprite);
             }
+
+
             jadel::Vec3 illumination = currentSector.illumination;
             jadel::graphicsMultiplyPixelValues(illumination.x, illumination.y, illumination.z);
             jadel::graphicsPopTargetSurface();
             jadel::graphicsBlit(&_workingTileSurface, entityDim);
+            if (currentSector.onFire)
+            {
+                if (drawFireOne)
+                    jadel::graphicsBlit(g_Assets.getSurface("res/fire.png"), entityDim);    
+                else
+                    jadel::graphicsBlit(g_Assets.getSurface("res/fire2.png"), entityDim);    
+            }
         }
     }
     jadel::graphicsPopTargetSurface();
@@ -163,9 +187,6 @@ void renderGameObjects()
             {
                 // jadel::graphicsBlit(spriteToDraw, {0, 0, 256, 256});
                 jadel::graphicsCopyEqualSizeSurface(spriteToDraw);
-            }
-            if (currentSector.occupant && currentSector.occupant->gameObject.affectedByLight)
-            {
                 jadel::Vec3 illumination = currentSector.illumination;
                 jadel::graphicsMultiplyPixelValues(illumination.x, illumination.y, illumination.z);
             }

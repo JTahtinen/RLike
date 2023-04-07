@@ -102,6 +102,15 @@ jadel::Recti getSectorScreenPos(const Sector *sector)
     return result;
 }
 
+jadel::Point2i getCurrentWorldDimensions()
+{
+    jadel::Point2i result;
+    World *world = currentGame->currentWorld;
+    result.x = world->width;
+    result.y = world->height;
+    return result;
+}
+
 Sector *getSectorOfEntity(Entity *entity)
 {
     Sector *result = getSectorFromPos(entity->pos);
@@ -585,7 +594,7 @@ bool initGame(jadel::Window *window)
     currentGame->tileScreenH = window->height / screenTilemapH;
 
     gameCommands.numKeyPressCommands = 4;
-    gameCommands.numKeyTypeCommands = 3;
+    gameCommands.numKeyTypeCommands = 4;
     gameCommands.keyPress[0] = jadel::KEY_A;
     gameCommands.keyPress[1] = jadel::KEY_D;
     gameCommands.keyPress[2] = jadel::KEY_W;
@@ -593,6 +602,7 @@ bool initGame(jadel::Window *window)
     gameCommands.keyType[0] = jadel::KEY_TAB;
     gameCommands.keyType[1] = jadel::KEY_E;
     gameCommands.keyType[2] = jadel::KEY_L;
+    gameCommands.keyType[3] = jadel::KEY_K;
     gameCommands.keyPressCommands[0] = COMMAND_MOVE_LEFT;
     gameCommands.keyPressCommands[1] = COMMAND_MOVE_RIGHT;
     gameCommands.keyPressCommands[2] = COMMAND_MOVE_UP;
@@ -600,6 +610,7 @@ bool initGame(jadel::Window *window)
     gameCommands.keyTypeCommands[0] = COMMAND_TOGGLE_INVENTORY;
     gameCommands.keyTypeCommands[1] = COMMAND_TAKE_ITEM;
     gameCommands.keyTypeCommands[2] = COMMAND_LOOK;
+    gameCommands.keyTypeCommands[3] = COMMAND_START_FIRE;
 
     currentGame->worlds = (World *)jadel::memoryReserve(2 * sizeof(World));
     currentGame->numWorlds = 2;
@@ -628,11 +639,15 @@ bool initGame(jadel::Window *window)
     daggerFrames.sprites[0] = g_Assets.getSurface("res/dagger.png");
     daggerFrames.numFrames = 1;
 
+    AnimFrames woolSockFrames;
+    woolSockFrames.sprites[0] = g_Assets.getSurface("res/villasukat.png");
+    woolSockFrames.numFrames = 1;
+
     currentGame->walkTile = {.surface = g_Assets.getSurface("res/grass.png"), .barrier = false};
     currentGame->wallTile = {.surface = g_Assets.getSurface("res/wall.png"), .barrier = true};
 
-    //initWorld(20, 10, &currentGame->worlds[0]);
-    
+    // initWorld(20, 10, &currentGame->worlds[0]);
+
     if (!loadWorld("res/testlevel.txt", &currentGame->worlds[0]))
     {
         return false;
@@ -662,9 +677,16 @@ bool initGame(jadel::Window *window)
     healthPackTemplate.maxHealth = 100;
     healthPackTemplate.name = "Health potion";
 
+    GameObjectTemplate woolSockTemplate;
+    woolSockTemplate.affectedByLight = true;
+    woolSockTemplate.frames = woolSockFrames;
+    woolSockTemplate.maxHealth = 100;
+    woolSockTemplate.name = "Villasukat";
+
     pushActor(2, 1, playerFrames, "Teuvo", &currentGame->worlds[1]);
     pushActor(4, 3, playerFrames, "Jouko", &currentGame->worlds[0]);
     pushItem(createHealthItem(6, 5, &healthPackTemplate, 20), &currentGame->worlds[1]);
+    pushItem(createHealthItem(3, 2, &woolSockTemplate, 20), &currentGame->worlds[1]);
     pushItem(createHealthItem(8, 6, poisonFrames, "Poison", -10), &currentGame->worlds[0]);
     pushItem(createHealthItem(9, 4, &healthPackTemplate, 20), &currentGame->worlds[0]);
     pushItem(createHealthItem(10, 4, &healthPackTemplate, 20), &currentGame->worlds[0]);
@@ -688,7 +710,7 @@ bool initGame(jadel::Window *window)
         World *curWorld = currentGame->currentWorld;
 
         LinkedListIterator actorIterator(&curWorld->actors);
-        Actor** actor;
+        Actor **actor;
         while (actor = actorIterator.getNext())
         {
             jadel::Point2i actorPos = (*actor)->gameObject.entity.pos;
@@ -697,7 +719,7 @@ bool initGame(jadel::Window *window)
         calculateLights(curWorld);
     }
     setPortal(2, 0, currentGame->worlds[0].entity.id, 3, 4, currentGame->worlds[1].entity.id);
-    
+
     currentGame->currentWorld = &currentGame->worlds[0];
 
     currentGame->player.inventory.useMode = false;
@@ -943,6 +965,13 @@ void updateSubstateGame()
             }
             break;
         }
+        case COMMAND_START_FIRE:
+        {
+            Sector *sector = getSectorOfActor(&currentGame->player);
+            if (!sector->flammable) break;
+            sector->temperature = 1.0f;
+            sector->onFire = true;
+        }
         default:
             jadel::message("Invalid action\n");
             break;
@@ -962,6 +991,31 @@ void updateSubstateGame()
 
     if (playerMoved) // jadel::inputIsKeyTyped(jadel::KEY_M))
     {
+        jadel::Point2i worldDim = getCurrentWorldDimensions();
+        for (int y = 0; y < worldDim.y; ++y)
+        {
+            for (int x = 0; x < worldDim.x; ++x)
+            {
+                Sector *currentSector = getSectorFromPos({x, y});
+                if (!currentSector->flammable) continue;
+                jadel::Vector<Sector *> surroundingSectors = getSurroudingSectors(x, y, currentGame->currentWorld);
+                for (int i = 0; i < surroundingSectors.size; ++i)
+                {
+                    if (surroundingSectors[i]->onFire)
+                    {
+                        if (i == 0 || i == 2 || i == 5 || i == 7)
+                            currentSector->temperature = jadel::clampf(currentSector->temperature + 0.02f, 0, 1.0f);
+                        else
+                            currentSector->temperature = jadel::clampf(currentSector->temperature + 0.05f, 0, 1.0f);
+                    }
+                }
+                surroundingSectors.freeVector();
+                if (currentSector->temperature >= currentSector->ignitionTreshold)
+                {
+                    currentSector->onFire = true;
+                }
+            }
+        }
         Portal *portal = getSectorOfActor(&currentGame->player)->portal;
         if (portal)
         {
@@ -1047,7 +1101,7 @@ void updateGame()
         currentGame->spriteTimerMillis %= 333;
         auto &items = currentGame->currentWorld->items;
         LinkedListIterator itemIterator(&items);
-        Item** item;
+        Item **item;
         while (item = itemIterator.getNext())
         {
             setNextFrame(&(*item)->gameObject);
@@ -1059,7 +1113,7 @@ void updateGame()
     auto actors = getActors();
 
     LinkedListIterator actorIterator(&actors);
-    Actor** actorAddr;
+    Actor **actorAddr;
     while (actorAddr = actorIterator.getNext())
     {
         Actor *actor = *actorAddr;
@@ -1094,7 +1148,7 @@ void updateGame()
     {
         currentGame->screenPos = nextScreenPos;
     }
- 
+
     renderGame();
     renderer->render();
 }

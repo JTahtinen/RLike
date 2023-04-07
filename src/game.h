@@ -39,6 +39,7 @@ enum
     COMMAND_USE_ITEM,
     COMMAND_TAKE_ITEM,
     COMMAND_LOOK,
+    COMMAND_START_FIRE,
     COMMAND_COUNT
 };
 
@@ -108,6 +109,8 @@ jadel::Recti getSectorScreenPos(int x, int y);
 jadel::Recti getSectorScreenPos(jadel::Point2i pos);
 
 jadel::Recti getSectorScreenPos(const Sector* sector);
+
+jadel::Point2i getCurrentWorldDimensions();
 
 void addSectorItem(Sector* sector, Item* item);
 

@@ -115,6 +115,26 @@ Sector *getSectorFromPos(jadel::Point2i pos)
     return result;
 }
 
+jadel::Vector<Sector*> getSurroudingSectors(int x, int y, World* world)
+{   
+    jadel::Vector<Sector*> result;
+    jadel::vectorInit(8, &result);
+    for (int yy = 0; yy < 3; ++yy)
+    {
+        for (int xx = 0; xx < 3; ++xx)
+        {
+            if (xx == 1 && yy == 1) continue;
+
+            Sector* sector = getSectorFromPos(x - 1 + xx, y - 1 + yy);
+            if (sector)
+            {
+                result.push(sector);
+            }
+        }
+    }
+    return result;
+}
+
 void calculateLights(World *world)
 {
     for (int i = 0; i < world->width * world->height; ++i)
@@ -234,6 +254,10 @@ void initSector(int x, int y, const Tile *tile, Sector *target)
     target->items.head = NULL;
     target->portal = NULL;
     target->illumination = jadel::Vec3(0, 0, 0);
+    target->ignitionTreshold = 0.5f;
+    target->temperature = 0;
+    target->onFire = false;
+    target->flammable = tile->flammable;
 }
 
 bool initWorld(int width, int height, Sector *sectorMap, const jadel::Vector<Tile>& tiles, World *world)
@@ -343,6 +367,7 @@ bool loadWorld(const char *filepath, World *target)
                 {
                     bool surfaceFound = false;
                     bool barrierFound = false;
+                    bool flammableFound = false;
                     Tile tile;
                     token = strtok_s(file, ": \n", &file);
                     int id = atoi(token);
@@ -352,7 +377,7 @@ bool loadWorld(const char *filepath, World *target)
                         return false;
                     }
                     tileIDs[numTilesLoaded] = id;
-                    while (!surfaceFound || !barrierFound)
+                    while (!surfaceFound || !barrierFound || !flammableFound)
                     {
                         token = strtok_s(file, ": \n", &file);
                         if (strcmp(token, "surface") == 0)
@@ -385,6 +410,27 @@ bool loadWorld(const char *filepath, World *target)
                             {
                                 tile.barrier = false;
                                 barrierFound = true;
+                                continue;
+                            }
+                        }
+                        else if (strcmp(token, "flammable") == 0)
+                        {
+                            if (flammableFound)
+                            {
+                                jadel::message("%s%s: duplicate flammable in tile definition\n", errorMessage, filepath);
+                                return false;
+                            }
+                            token = strtok_s(file, ": \n", &file);
+                            if (strcmp(token, "true") == 0 || strcmp(token, "1") == 0)
+                            {
+                                tile.flammable = true;
+                                flammableFound = true;
+                                continue;
+                            }
+                            else if (strcmp(token, "false") == 0 || strcmp(token, "0") == 0)
+                            {
+                                tile.flammable = false;
+                                flammableFound = true;
                                 continue;
                             }
                         }
